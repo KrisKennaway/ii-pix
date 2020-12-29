@@ -3,6 +3,13 @@ from PIL import Image
 
 import numpy as np
 
+# TODO:
+# - output binary files that can be viewed on Apple II
+# - use perceptual colour difference model
+# - look ahead N pixels and compute all 2^N bit patterns, then minimize
+#   average error
+# - optimize Dither.apply() critical path
+
 X_RES = 560
 Y_RES = 192
 
@@ -71,12 +78,14 @@ class Dither:
     ORIGIN = None
 
     def apply(self, image, x, y, quant_error):
-        pattern = self.PATTERN[:Y_RES - y, :X_RES - x] / np.sum(self.PATTERN)
-        for offset, error_fraction in np.ndenumerate(pattern):
-            coord = (x + offset[1] - self.ORIGIN[1], y + offset[0] -
-                     self.ORIGIN[0])
-            new_pixel = image.getpixel(coord) + error_fraction * quant_error
-            image.putpixel(coord, tuple(new_pixel.astype(int)))
+        for offset, error_fraction in np.ndenumerate(self.PATTERN / np.sum(
+                self.PATTERN)):
+            xx = x + offset[1] - self.ORIGIN[1]
+            yy = y + offset[0] - self.ORIGIN[0]
+            if xx < 0 or yy < 0 or xx > (X_RES - 1) or yy > (Y_RES - 1):
+                continue
+            new_pixel = image.getpixel((xx, yy)) + error_fraction * quant_error
+            image.putpixel((xx, yy), tuple(new_pixel.astype(int)))
 
 
 class FloydSteinbergDither(Dither):
