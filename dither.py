@@ -8,15 +8,13 @@ import colormath.color_diff
 import colormath.color_objects
 import numpy as np
 
+
 # TODO:
 # - compare to bmp2dhr and a2bestpix
 # - deal with fringing
 # - look ahead N pixels and compute all 2^N bit patterns, then minimize
 #   average error
 # - optimize Dither.apply() critical path
-
-X_RES = 560
-Y_RES = 192
 
 
 def srgb_to_linear_array(a: np.ndarray, gamma=2.4) -> np.ndarray:
@@ -27,6 +25,7 @@ def linear_to_srgb_array(a: np.ndarray, gamma=2.4) -> np.ndarray:
     return np.where(a <= 0.0031308, a * 12.92, 1.055 * a ** (1.0 / gamma) -
                     0.055)
 
+
 def srgb_to_linear(im: Image) -> Image:
     a = np.array(im, dtype=np.float32) / 255.0
     rgb_linear = srgb_to_linear_array(a, gamma=2.4)
@@ -36,7 +35,7 @@ def srgb_to_linear(im: Image) -> Image:
 
 def linear_to_srgb(im: Image) -> Image:
     a = np.array(im, dtype=np.float32) / 255.0
-    srgb = linear_to_srgb_array(a, gamma = 2.4)
+    srgb = linear_to_srgb_array(a, gamma=2.4)
     return Image.fromarray((np.clip(srgb, 0.0, 1.0) * 255).astype(np.uint8))
 
 
@@ -62,26 +61,6 @@ RGB = {
 }
 
 # OpenEmulator
-
-# RGB = {
-#     (False, False, False, False): np.array((0, 0, 0)),  # Black
-#     (False, False, False, True): np.array((189, 0, 102)),  # Magenta
-#     (False, False, True, False): np.array((81, 86, 0)),  # Brown
-#     (False, False, True, True): np.array((238, 55, 0)),  # Orange
-#     (False, True, False, False): np.array((3, 135, 0)),  # Dark green
-#     # XXX RGB values are used as keys in DOTS dict, need to be unique
-#     (False, True, False, True): np.array((111, 111, 111)),  # Grey1
-#     (False, True, True, False): np.array((14, 237, 0)),  # Green
-#     (False, True, True, True): np.array((204, 213, 0)),  # Yellow
-#     (True, False, False, False): np.array((13, 0, 242)),  # Dark blue
-#     (True, False, False, True): np.array((221, 0, 241)),  # Violet
-#     (True, False, True, False): np.array((112, 112, 112)),  # Grey2
-#     (True, False, True, True): np.array((236, 72, 229)),  # Pink
-#     (True, True, False, False): np.array((0, 157, 241)),  # Med blue
-#     (True, True, False, True): np.array((142, 133, 240)),  # Light blue
-#     (True, True, True, False): np.array((39, 247, 117)),  # Aqua
-#     (True, True, True, True): np.array((236, 236, 236)),  # White
-# }
 sRGB = {
     (False, False, False, False): np.array((0, 0, 0)),  # Black
     (False, False, False, True): np.array((206, 0, 123)),  # Magenta
@@ -101,7 +80,7 @@ sRGB = {
     (True, True, True, False): np.array((21, 241, 132)),  # Aqua
     (True, True, True, True): np.array((244, 247, 244)),  # White
 }
-#
+
 # # Virtual II (sRGB)
 # sRGB = {
 #     (False, False, False, False): np.array((0, 0, 0)),  # Black
@@ -171,8 +150,8 @@ class CCIR601Distance(ColourDistance):
         return rgb[0] * 0.299 + rgb[1] * 0.587 + rgb[2] * 0.114
 
     def distance(self, rgb1: Tuple[int], rgb2: Tuple[int]) -> float:
-        delta_rgb = ((rgb1[0] - rgb2[0])/255, (rgb1[1] - rgb2[1])/255,
-                     (rgb1[2] - rgb2[2])/255)
+        delta_rgb = ((rgb1[0] - rgb2[0]) / 255, (rgb1[1] - rgb2[1]) / 255,
+                     (rgb1[2] - rgb2[2]) / 255)
         luma_diff = (self._to_luma(rgb1) - self._to_luma(rgb2)) / 255
 
         return (
@@ -182,44 +161,129 @@ class CCIR601Distance(ColourDistance):
                        luma_diff * luma_diff)
 
 
-def find_closest_color(pixel, last_pixel, x: int):
-    least_diff = 1e9
-    best_colour = None
+class Screen:
+    X_RES = None
+    Y_RES = None
+    X_PIXEL_WIDTH = None
 
-    last_dots = DOTS[tuple(last_pixel)]
-    other_dots = list(last_dots)
-    other_dots[x % 4] = not other_dots[x % 4]
-    other_dots = tuple(other_dots)
-    for v in (RGB[last_dots], RGB[other_dots]):
-        diff = np.sum(np.power(v - np.array(pixel), 2))
-        if diff < least_diff:
-            least_diff = diff
-            best_colour = v
-    return best_colour
+    def __init__(self):
+        self.main = np.zeros(8192, dtype=np.uint8)
+        self.aux = np.zeros(8192, dtype=np.uint8)
+
+    @staticmethod
+    def y_to_base_addr(y: int) -> int:
+        """Maps y coordinate to screen memory base address."""
+        a = y // 64
+        d = y - 64 * a
+        b = d // 8
+        c = d - 8 * b
+
+        return 1024 * c + 128 * b + 40 * a
+
+    def _image_to_bitmap(self, image: Image) -> np.ndarray:
+        raise NotImplementedError
+
+    def pack(self, image: Image):
+        bitmap = self._image_to_bitmap(image)
+        # The DHGR display encodes 7 pixels across interleaved 4-byte sequences
+        # of AUX and MAIN memory, as follows:
+        # PBBBAAAA PDDCCCCB PFEEEEDD PGGGGFFF
+        # Aux N    Main N   Aux N+1  Main N+1  (N even)
+        main_col = np.zeros(
+            (self.Y_RES, self.X_RES * self.X_PIXEL_WIDTH // 14), dtype=np.uint8)
+        aux_col = np.zeros(
+            (self.Y_RES, self.X_RES * self.X_PIXEL_WIDTH // 14), dtype=np.uint8)
+        for byte_offset in range(80):
+            column = np.zeros(self.Y_RES, dtype=np.uint8)
+            for bit in range(7):
+                column |= (bitmap[:, 7 * byte_offset + bit].astype(
+                    np.uint8) << bit)
+            if byte_offset % 2 == 0:
+                aux_col[:, byte_offset // 2] = column
+            else:
+                main_col[:, (byte_offset - 1) // 2] = column
+
+        for y in range(self.Y_RES):
+            addr = self.y_to_base_addr(y)
+            self.aux[addr:addr + 40] = aux_col[y, :]
+            self.main[addr:addr + 40] = main_col[y, :]
+
+    @staticmethod
+    def pixel_palette_options(last_pixel, x: int):
+        raise NotImplementedError
+
+    @staticmethod
+    def find_closest_color(pixel, palette_options, differ: ColourDistance):
+        least_diff = 1e9
+        best_colour = None
+
+        for v in palette_options:
+            diff = differ.distance(tuple(v), pixel)
+            if diff < least_diff:
+                least_diff = diff
+                best_colour = v
+        return best_colour
 
 
-def find_closest_color(pixel, last_pixel, x: int, differ: ColourDistance):
-    least_diff = 1e9
-    best_colour = None
+class DHGR140Screen(Screen):
+    """DHGR screen ignoring colour fringing, i.e. treating as 140x192x16."""
 
-    for v in RGB.values():
-        diff = differ.distance(tuple(v), pixel)
-        if diff < least_diff:
-            least_diff = diff
-            best_colour = v
-    return best_colour
+    X_RES = 140
+    Y_RES = 192
+    X_PIXEL_WIDTH = 4
+
+    def _image_to_bitmap(self, image: Image) -> np.ndarray:
+        bitmap = np.zeros(
+            (self.Y_RES, self.X_RES * self.X_PIXEL_WIDTH), dtype=np.bool)
+        for y in range(self.Y_RES):
+            for x in range(self.X_RES):
+                pixel = image.getpixel((x, y))
+                dots = DOTS[pixel]
+                bitmap[y, x * self.X_PIXEL_WIDTH:(
+                        (x + 1) * self.X_PIXEL_WIDTH)] = dots
+        return bitmap
+
+    @staticmethod
+    def pixel_palette_options(last_pixel, x: int):
+        return RGB.values()
+
+
+class DHGR560Screen(Screen):
+    """DHGR screen including colour fringing."""
+    X_RES = 560
+    Y_RES = 192
+    X_PIXEL_WIDTH = 1
+
+    def _image_to_bitmap(self, image: Image) -> np.ndarray:
+        bitmap = np.zeros((self.Y_RES, self.X_RES), dtype=np.bool)
+        for y in range(self.Y_RES):
+            for x in range(self.X_RES):
+                pixel = image.getpixel((x, y))
+                dots = DOTS[pixel]
+                phase = x % 4
+                bitmap[y, x] = dots[phase]
+        return bitmap
+
+    def pixel_palette_options(self, last_pixel, x: int):
+        last_dots = DOTS[tuple(last_pixel)]
+        other_dots = list(last_dots)
+        other_dots[x % 4] = not other_dots[x % 4]
+        other_dots = tuple(other_dots)
+        return RGB[last_dots], RGB[other_dots]
 
 
 class Dither:
     PATTERN = None
     ORIGIN = None
 
-    def apply(self, image, x, y, quant_error):
+    def apply(self, screen: Screen, image: Image, x: int, y: int,
+              quant_error: float):
         for offset, error_fraction in np.ndenumerate(self.PATTERN / np.sum(
                 self.PATTERN)):
             xx = x + offset[1] - self.ORIGIN[1]
             yy = y + offset[0] - self.ORIGIN[0]
-            if xx < 0 or yy < 0 or xx > (X_RES // 4 - 1) or yy > (Y_RES - 1):
+            if xx < 0 or yy < 0 or xx > (screen.X_RES - 1) or (
+                    yy > (screen.Y_RES - 1)):
                 continue
             new_pixel = image.getpixel((xx, yy)) + error_fraction * quant_error
             image.putpixel((xx, yy), tuple(new_pixel.astype(int)))
@@ -269,75 +333,32 @@ def SRGBResize(im, size, filter):
     return Image.fromarray(arrOut)
 
 
-def open_image(filename: str) -> Image:
+def open_image(screen: Screen, filename: str) -> Image:
     im = Image.open(filename)
+    # TODO: convert to sRGB colour profile explicitly, in case it has some other
+    #  profile already.
     if im.mode != "RGB":
         im = im.convert("RGB")
-    # rgb_linear = srgb_to_linear(np.array(im, dtype=np.float32) / 255.0)
-    # im = Image.fromarray(rgb_linear * 255)
-    return srgb_to_linear(SRGBResize(im, (X_RES // 4, Y_RES), Image.LANCZOS))
-    # return SRGBResize(im, (X_RES // 4, Y_RES), Image.LANCZOS)
+    return srgb_to_linear(
+        SRGBResize(im, (screen.X_RES, screen.Y_RES),
+                   Image.LANCZOS))
 
 
-def dither_image(image: Image, dither: Dither, differ: ColourDistance) -> Image:
-    for y in range(Y_RES):
+def dither_image(
+        screen: Screen, image: Image, dither: Dither, differ: ColourDistance
+) -> Image:
+    for y in range(screen.Y_RES):
         print(y)
         new_pixel = (0, 0, 0)
-        for x in range(X_RES // 4):
+        for x in range(screen.X_RES):
             old_pixel = image.getpixel((x, y))
-            new_pixel = find_closest_color(old_pixel, new_pixel, x, differ)
+            palette_choices = screen.pixel_palette_options(new_pixel, x)
+            new_pixel = screen.find_closest_color(
+                old_pixel, palette_choices, differ)
             image.putpixel((x, y), tuple(new_pixel))
             quant_error = old_pixel - new_pixel
-            dither.apply(image, x, y, quant_error)
+            dither.apply(screen, image, x, y, quant_error)
     return image
-
-
-class Screen:
-    def __init__(self, image: Image):
-        self.bitmap = np.zeros((Y_RES, X_RES), dtype=np.bool)
-
-        self.main = np.zeros(8192, dtype=np.uint8)
-        self.aux = np.zeros(8192, dtype=np.uint8)
-
-        for y in range(Y_RES):
-            for x in range(X_RES // 4):
-                pixel = image.getpixel((x, y))
-                dots = DOTS[pixel]
-                # phase = x % 4
-                # self.bitmap[y, x] = dots[phase]
-                self.bitmap[y, x * 4:(x + 1) * 4] = dots
-
-    @staticmethod
-    def y_to_base_addr(y: int) -> int:
-        """Maps y coordinate to screen memory base address."""
-        a = y // 64
-        d = y - 64 * a
-        b = d // 8
-        c = d - 8 * b
-
-        return 1024 * c + 128 * b + 40 * a
-
-    def pack(self):
-        # The DHGR display encodes 7 pixels across interleaved 4-byte sequences
-        # of AUX and MAIN memory, as follows:
-        # PBBBAAAA PDDCCCCB PFEEEEDD PGGGGFFF
-        # Aux N    Main N   Aux N+1  Main N+1  (N even)
-        main_col = np.zeros((Y_RES, X_RES // 14), dtype=np.uint8)
-        aux_col = np.zeros((Y_RES, X_RES // 14), dtype=np.uint8)
-        for byte_offset in range(80):
-            column = np.zeros(Y_RES, dtype=np.uint8)
-            for bit in range(7):
-                column |= (self.bitmap[:, 7 * byte_offset + bit].astype(
-                    np.uint8) << bit)
-            if byte_offset % 2 == 0:
-                aux_col[:, byte_offset // 2] = column
-            else:
-                main_col[:, (byte_offset - 1) // 2] = column
-
-        for y in range(Y_RES):
-            addr = self.y_to_base_addr(y)
-            self.aux[addr:addr + 40] = aux_col[y, :]
-            self.main[addr:addr + 40] = main_col[y, :]
 
 
 def main():
@@ -345,9 +366,11 @@ def main():
     parser.add_argument("input", type=str, help="Input file to process")
     parser.add_argument("output", type=str, help="Output file for ")
 
-    args = parser.parse_args()
-    image = open_image(args.input)
+    # screen = DHGR140Screen()
+    screen = DHGR560Screen()
 
+    args = parser.parse_args()
+    image = open_image(screen, args.input)
     image.show()
 
     # dither = FloydSteinbergDither()
@@ -357,16 +380,14 @@ def main():
     # differ = CIE2000Distance()
     differ = CCIR601Distance()
 
-    output = dither_image(image, dither, differ)
-    # output.show()
-    screen = Screen(output)
+    output = dither_image(screen, image, dither, differ)
     linear_to_srgb(output).show()
     # bitmap = Image.fromarray(screen.bitmap.astype('uint8') * 255)
-    screen.pack()
+    screen.pack(output)
 
     with open(args.output, "wb") as f:
-        f.write(screen.main)
-        f.write(screen.aux)
+        f.write(bytes(screen.main))
+        f.write(bytes(screen.aux))
 
 
 if __name__ == "__main__":
