@@ -382,6 +382,7 @@ def dither_lookahead(
             # output_pixel = dither_one_pixel(screen, differ,
             #                                 input_pixel, output_pixel, xx)
             quant_error = input_pixel - output_pixel
+            # TODO: try squared error
             total_error += differ.distance(input_pixel, output_pixel)
             dither.apply(screen, temp_image, xx, y, quant_error)
         # print(bin(i), total_error, inputs, choices)
@@ -415,18 +416,6 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("input", type=str, help="Input file to process")
     parser.add_argument("output", type=str, help="Output file for ")
-    import traceback
-    import warnings
-    import sys
-
-    def warn_with_traceback(message, category, filename, lineno, file=None,
-                            line=None):
-        log = file if hasattr(file, 'write') else sys.stderr
-        traceback.print_stack(file=log)
-        log.write(
-            warnings.formatwarning(message, category, filename, lineno, line))
-
-    warnings.showwarning = warn_with_traceback
     # screen = DHGR140Screen()
     screen = DHGR560Screen()
 
