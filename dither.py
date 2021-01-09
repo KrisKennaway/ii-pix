@@ -154,6 +154,14 @@ class CIE2000Distance(ColourDistance):
         return colour.difference.delta_E_CIE2000(lab1, lab2)
 
 
+class LABEuclideanDistance(ColourDistance):
+    """Euclidean distance in LAB colour space."""
+
+    @staticmethod
+    def distance(lab1: np.ndarray, lab2: np.ndarray) -> float:
+        return np.sqrt(np.sum(np.power(lab1 - lab2, 2), axis=2))
+
+
 # class CCIR601Distance(ColourDistance):
 #     @staticmethod
 #     def _to_luma(rgb: np.ndarray):
@@ -308,8 +316,8 @@ class Dither:
         if one_line:
             yb = yt + 1
             eb = et + 1
-        # print(xl, xr, el, er)
-        # print(image.shape, error.shape)
+        # TODO: compare without clipping here, i.e. allow RGB values to exceed
+        # 0-255 range
         image[yt:yb, xl:xr, :] = np.clip(
             image[yt:yb, xl:xr, :] + error[et:eb, el:er, :], 0, 255)
 
@@ -371,7 +379,7 @@ def open_image(screen: Screen, filename: str) -> np.ndarray:
 def lookahead_options(screen, lookahead, last_pixel_rgb, x):
     options_rgb = np.empty((2 ** lookahead, lookahead, 3), dtype=np.float32)
     options_lab = np.empty((2 ** lookahead, lookahead, 3), dtype=np.float32)
-    for i in range(2**lookahead):
+    for i in range(2 ** lookahead):
         output_pixel_rgb = np.array(last_pixel_rgb)
         for j in range(lookahead):
             xx = x + j
@@ -403,7 +411,7 @@ def ideal_dither(screen: Screen, image: np.ndarray, image_lab: np.ndarray,
     palette_choices_lab = np.array(list(LAB.values()))
     for xx in range(x, min(max(x + lookahead, xr), screen.X_RES)):
         input_pixel = np.copy(ideal_dither[y, xx, :])
-        input_pixel_lab = rgb_to_lab(input_pixel)
+        input_pixel_lab = rgb_to_lab(np.clip(input_pixel), 0, 255)
         ideal_dither_lab[y, xx, :] = input_pixel_lab
         output_pixel = screen.find_closest_color(input_pixel_lab,
                                                  palette_choices,
@@ -429,7 +437,7 @@ def dither_lookahead(
     # copies of input pixels so we can dither in bulk
     # Leave enough space so we can dither the last of our lookahead pixels
     lah_image_rgb = np.zeros(
-        (2**lookahead, lookahead + xr - xl, 3), dtype=np.float32)
+        (2 ** lookahead, lookahead + xr - xl, 3), dtype=np.float32)
     lah_image_rgb[:, 0:xxr - x, :] = image_rgb[y, x:xxr, :]
 
     options_rgb, options_lab = lookahead_options(
@@ -446,22 +454,23 @@ def dither_lookahead(
         # errors to positions >x so we can compensate for how good/bad these
         # choices were
         # XXX vectorize
-        for j in range(2**lookahead):
+        for j in range(2 ** lookahead):
             # print(quant_error[j])
             dither.apply(
                 screen, lah_image_rgb[j, :, :].reshape(1, -1, 3),
                 i, 0, quant_error[j], one_line=True)
 
-    #print("options=", options_rgb)
-    #print("rgb=",lah_image_rgb)
-    lah_image_lab = rgb_to_lab(lah_image_rgb[:, 0:lookahead, :])
+    # print("options=", options_rgb)
+    # print("rgb=",lah_image_rgb)
+    lah_image_lab = rgb_to_lab(np.clip(lah_image_rgb[:, 0:lookahead, :], 0,
+                                       255))
     error = differ.distance(lah_image_lab, options_lab)
     # print(lah_image_lab)
-    #print("error=", error)
+    # print("error=", error)
     total_error = np.sum(np.power(error, 2), axis=1)
-    #print("total_error=",total_error)
+    # print("total_error=",total_error)
     best = np.argmin(total_error)
-    #print("best=",best)
+    # print("best=",best)
     return options_rgb[best, 0, :], options_lab[best, 0, :]
 
 
@@ -478,7 +487,8 @@ def dither_image(
             # Make sure lookahead region is updated from previously applied
             # dithering
             et, eb, el, er, yt, yb, xl, xr = dither.dither_bounds(screen, x, y)
-            image_lab[y, x:xr, :] = rgb_to_lab(image_rgb[y, x:xr, :])
+            image_lab[y, x:xr, :] = rgb_to_lab(
+                np.clip(image_rgb[y, x:xr, :], 0, 255))
 
             # ideal_lab = ideal_dither(screen, image_rgb, image_lab, dither,
             #                         differ, x, y, lookahead)
@@ -516,6 +526,7 @@ def main():
     dither = JarvisDither()
 
     differ = CIE2000Distance()
+    # differ = LABEuclideanDistance()
     # differ = CCIR601Distance()
 
     output = dither_image(screen, image, dither, differ,
