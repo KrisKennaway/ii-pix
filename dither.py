@@ -116,38 +116,6 @@ class RGBDistance(ColourDistance):
                                                  np.array(rgb2), 2))))
 
 
-class CIE2000Distance(ColourDistance):
-    """CIE2000 delta-E distance."""
-
-    @staticmethod
-    # XXX
-    def _nearest_colours():
-        all_rgb = np.array(tuple(np.ndindex(256, 256, 256)),
-                           dtype=np.uint8)
-
-        all_srgb = linear_to_srgb(all_rgb / 255) * 255
-        xyz = colour.sRGB_to_XYZ(all_srgb)
-        lab = colour.XYZ_to_Lab(xyz)
-        print(all_rgb.shape)
-        best_diff = np.full(all_rgb.shape[0], 1e9, dtype=np.float32)
-        best_match = np.empty(all_rgb.shape[0], dtype=np.uint8)
-
-        for i, p in enumerate(RGB.values()):
-            p_srgb = linear_to_srgb_array(p / 255) * 255
-            diff = colour.delta_E(all_rgb, p_srgb)
-            print(diff < best_diff)
-            print(best_diff.shape)
-            better = diff < best_diff
-            best_match[better] = i
-            best_diff[better] = diff[better]
-
-        return best_match.reshape((256, 256, 256))
-
-    @staticmethod
-    def distance(lab1: np.ndarray, lab2: np.ndarray) -> float:
-        return colour.difference.delta_E_CIE2000(lab1, lab2)
-
-
 def rgb_to_lab(rgb: np.ndarray):
     srgb = np.clip(
         linear_to_srgb_array(np.array(rgb, dtype=np.float32) / 255), 0.0,
@@ -161,8 +129,29 @@ for k, v in RGB.items():
     LAB[k] = rgb_to_lab(v)
 
 DOTS = {}
-for k, v in LAB.items():
+for k, v in RGB.items():
     DOTS[tuple(v)] = k
+
+
+class CIE2000Distance(ColourDistance):
+    """CIE2000 delta-E distance."""
+
+    def _nearest_colours(self):
+        diffs = np.empty_like((256 ** 3, 16), dtype=np.float32)
+
+        all_rgb = np.array(tuple(np.ndindex(256, 256, 256)),
+                           dtype=np.uint8)
+        all_srgb = linear_to_srgb(all_rgb / 255) * 255
+        all_xyz = colour.sRGB_to_XYZ(all_srgb)
+        all_lab = colour.XYZ_to_Lab(all_xyz)
+
+        for i, p in enumerate(LAB.values()):
+            diffs[:, i] = colour.difference.delta_E_CIE2000(all_lab, p)
+        self.diffs = diffs
+
+    @staticmethod
+    def distance(lab1: np.ndarray, lab2: np.ndarray) -> float:
+        return colour.difference.delta_E_CIE2000(lab1, lab2)
 
 
 # class CCIR601Distance(ColourDistance):
@@ -249,12 +238,12 @@ class DHGR140Screen(Screen):
     Y_RES = 192
     X_PIXEL_WIDTH = 4
 
-    def _image_to_bitmap(self, image: np.ndarray) -> np.ndarray:
+    def _image_to_bitmap(self, image_rgb: np.ndarray) -> np.ndarray:
         bitmap = np.zeros(
             (self.Y_RES, self.X_RES * self.X_PIXEL_WIDTH), dtype=np.bool)
         for y in range(self.Y_RES):
             for x in range(self.X_RES):
-                pixel = image[y, x]
+                pixel = image_rgb[y, x]
                 dots = DOTS[pixel]
                 bitmap[y, x * self.X_PIXEL_WIDTH:(
                         (x + 1) * self.X_PIXEL_WIDTH)] = dots
@@ -282,8 +271,8 @@ class DHGR560Screen(Screen):
         return bitmap
 
     @staticmethod
-    def pixel_palette_options(last_pixel, x: int):
-        last_dots = DOTS[tuple(last_pixel)]
+    def pixel_palette_options(last_pixel_rgb, x: int):
+        last_dots = DOTS[tuple(last_pixel_rgb)]
         other_dots = list(last_dots)
         other_dots[x % 4] = not other_dots[x % 4]
         other_dots = tuple(other_dots)
@@ -311,12 +300,16 @@ class Dither:
         return et, eb, el, er, yt, yb, xl, xr
 
     def apply(self, screen: Screen, image: np.ndarray, x: int, y: int,
-              quant_error: np.ndarray):
+              quant_error: np.ndarray, one_line=False):
         pshape = self.PATTERN.shape
         error = self.PATTERN.reshape(
-            (pshape[0], pshape[1], 1)) * quant_error.reshape((1, 1,
-                                                              3))
+            (pshape[0], pshape[1], 1)) * quant_error.reshape((1, 1, 3))
         et, eb, el, er, yt, yb, xl, xr = self.dither_bounds(screen, x, y)
+        if one_line:
+            yb = yt + 1
+            eb = et + 1
+        # print(xl, xr, el, er)
+        # print(image.shape, error.shape)
         image[yt:yb, xl:xr, :] = np.clip(
             image[yt:yb, xl:xr, :] + error[et:eb, el:er, :], 0, 255)
 
@@ -375,19 +368,20 @@ def open_image(screen: Screen, filename: str) -> np.ndarray:
 
 
 @functools.lru_cache(None)
-def lookahead_options(screen, lookahead, last_pixel_lab, x):
-    options_rgb = np.empty((lookahead, 2 ** lookahead, 3), dtype=np.float32)
-    options_lab = np.empty((lookahead, 2 ** lookahead, 3), dtype=np.float32)
-    for i in range(lookahead):
-        output_pixel_lab = np.array(last_pixel_lab)
-        for j in range(2 ** lookahead):
+def lookahead_options(screen, lookahead, last_pixel_rgb, x):
+    options_rgb = np.empty((2 ** lookahead, lookahead, 3), dtype=np.float32)
+    options_lab = np.empty((2 ** lookahead, lookahead, 3), dtype=np.float32)
+    for i in range(2**lookahead):
+        output_pixel_rgb = np.array(last_pixel_rgb)
+        for j in range(lookahead):
             xx = x + j
             palette_choices, palette_choices_lab = screen.pixel_palette_options(
-                output_pixel_lab, xx)
+                output_pixel_rgb, xx)
             output_pixel_lab = np.array(
                 palette_choices_lab[(i & (1 << j)) >> j])
             output_pixel_rgb = np.array(
                 palette_choices[(i & (1 << j)) >> j])
+            # XXX copy
             options_lab[i, j, :] = np.copy(output_pixel_lab)
             options_rgb[i, j, :] = np.copy(output_pixel_rgb)
 
@@ -424,20 +418,50 @@ def ideal_dither(screen: Screen, image: np.ndarray, image_lab: np.ndarray,
 
 
 def dither_lookahead(
-        screen: Screen, image_lab: np.ndarray, dither: Dither,
-        differ: ColourDistance, x, y, last_pixel_lab, lookahead) -> np.ndarray:
+        screen: Screen, image_rgb: np.ndarray, image_lab: np.ndarray,
+        dither: Dither, differ: ColourDistance, x, y, last_pixel_rgb,
+        lookahead) -> np.ndarray:
     et, eb, el, er, yt, yb, xl, xr = dither.dither_bounds(screen, x, y)
 
-    # TODO: propagate quantization error
-    options_rgb, options_lab = lookahead_options(screen, lookahead,
-                                                 tuple(last_pixel_lab), x % 4)
-    error = np.empty((lookahead, min(max(x + lookahead, xr), screen.X_RES) -
-                      x), dtype=np.float32)
-    for i in range(min(max(x + lookahead, xr), screen.X_RES) - x):
-        error[:, i] = differ.distance(image_lab[y, x + i, :],
-                                      options_lab[:, i])
+    # X coord value of larger of dither bounding box or lookahead horizon
+    xxr = min(max(x + lookahead, xr), screen.X_RES)
+
+    # copies of input pixels so we can dither in bulk
+    # Leave enough space so we can dither the last of our lookahead pixels
+    lah_image_rgb = np.zeros(
+        (2**lookahead, lookahead + xr - xl, 3), dtype=np.float32)
+    lah_image_rgb[:, 0:xxr - x, :] = image_rgb[y, x:xxr, :]
+
+    options_rgb, options_lab = lookahead_options(
+        screen, lookahead, tuple(last_pixel_rgb), x % 4)
+    for i in range(xxr - x):
+        # options_rgb choices are fixed, but we can still distribute
+        # quantization error from having made these choices, in order to compute
+        # the total error
+        input_pixels = lah_image_rgb[:, i, :]
+        output_pixels = options_rgb[:, i, :]
+        quant_error = input_pixels - output_pixels
+        # Don't update the input at position x (since we've already chosen
+        # deterministic outputs), but do propagate quantization
+        # errors to positions >x so we can compensate for how good/bad these
+        # choices were
+        # XXX vectorize
+        for j in range(2**lookahead):
+            # print(quant_error[j])
+            dither.apply(
+                screen, lah_image_rgb[j, :, :].reshape(1, -1, 3),
+                i, 0, quant_error[j], one_line=True)
+
+    #print("options=", options_rgb)
+    #print("rgb=",lah_image_rgb)
+    lah_image_lab = rgb_to_lab(lah_image_rgb[:, 0:lookahead, :])
+    error = differ.distance(lah_image_lab, options_lab)
+    # print(lah_image_lab)
+    #print("error=", error)
     total_error = np.sum(np.power(error, 2), axis=1)
+    #print("total_error=",total_error)
     best = np.argmin(total_error)
+    #print("best=",best)
     return options_rgb[best, 0, :], options_lab[best, 0, :]
 
 
@@ -448,7 +472,7 @@ def dither_image(
 
     for y in range(screen.Y_RES):
         print(y)
-        output_pixel_lab = rgb_to_lab(np.array((0, 0, 0), dtype=np.float32))
+        output_pixel_rgb = np.array((0, 0, 0), dtype=np.float32)
         for x in range(screen.X_RES):
             input_pixel_rgb = image_rgb[y, x, :]
             # Make sure lookahead region is updated from previously applied
@@ -459,8 +483,9 @@ def dither_image(
             # ideal_lab = ideal_dither(screen, image_rgb, image_lab, dither,
             #                         differ, x, y, lookahead)
             output_pixel_rgb, output_pixel_lab = dither_lookahead(
-                screen, image_lab, dither, differ, x, y, output_pixel_lab,
-                lookahead)
+                screen, image_rgb, image_lab, dither, differ, x, y,
+                output_pixel_rgb, lookahead)
+            # print(output_pixel_rgb, output_pixel_lab)
             quant_error = input_pixel_rgb - output_pixel_rgb
             image_rgb[y, x, :] = output_pixel_rgb
             dither.apply(screen, image_rgb, x, y, quant_error)
@@ -495,8 +520,7 @@ def main():
 
     output = dither_image(screen, image, dither, differ,
                           lookahead=args.lookahead)
-    output_lab = rgb_to_lab(output)
-    screen.pack(output_lab)
+    screen.pack(output)
 
     out_image = Image.fromarray(linear_to_srgb(output).astype(np.uint8))
     outfile = os.path.join(os.path.splitext(args.output)[0] + ".png")
