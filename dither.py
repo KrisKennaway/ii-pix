@@ -6,12 +6,10 @@ import pickle
 from typing import Tuple
 
 from PIL import Image
-import colour.difference
 import numpy as np
 
 
 # TODO:
-# - precompute lab differences
 # - only lookahead for 560px
 # - palette class
 # - compare to bmp2dhr and a2bestpix
@@ -25,7 +23,6 @@ def linear_to_srgb_array(a: np.ndarray, gamma=2.4) -> np.ndarray:
                     0.055)
 
 
-# XXX work uniformly with 255 or 1.0 range
 def srgb_to_linear(im: np.ndarray) -> np.ndarray:
     rgb_linear = srgb_to_linear_array(im / 255.0, gamma=2.4)
     return (np.clip(rgb_linear, 0.0, 1.0) * 255).astype(np.float32)
@@ -128,30 +125,8 @@ for k, v in sRGB.items():
 
 class ColourDistance:
     @staticmethod
-    def distance(rgb1: np.ndarray, rgb2: np.ndarray) -> float:
+    def distance(rgb1: np.ndarray, rgb2: np.ndarray) -> np.ndarray:
         raise NotImplementedError
-
-
-class RGBDistance(ColourDistance):
-    """Euclidean squared distance in RGB colour space."""
-
-    @staticmethod
-    def distance(rgb1: np.ndarray, rgb2: np.ndarray) -> float:
-        return float(np.asscalar(np.sum(np.power(np.array(rgb1) -
-                                                 np.array(rgb2), 2))))
-
-
-def rgb_to_lab(rgb: np.ndarray):
-    srgb = np.clip(
-        linear_to_srgb_array(np.array(rgb, dtype=np.float32) / 255), 0.0,
-        1.0)
-    xyz = colour.sRGB_to_XYZ(srgb)
-    return colour.XYZ_to_Lab(xyz)
-
-
-LAB = {}
-for k, v in RGB.items():
-    LAB[k] = rgb_to_lab(v)
 
 
 class CIE2000Distance(ColourDistance):
@@ -160,40 +135,15 @@ class CIE2000Distance(ColourDistance):
     def __init__(self):
         with bz2.open("nearest.pickle.bz2", "rb") as f:
             self._distances = pickle.load(f)
+            assert self._distances.dtype == np.uint8
 
     @staticmethod
     def _flatten_rgb(rgb):
         return (rgb[..., 0] << 16) + (rgb[..., 1] << 8) + (rgb[..., 2])
 
-    def distance(self, rgb: np.ndarray, bit4: np.ndarray) -> float:
-        frgb = self._flatten_rgb(np.clip(rgb, 0, 255).astype(np.int))
-        return self._distances[frgb, bit4]  # .astype(np.int)
-
-
-class LABEuclideanDistance(ColourDistance):
-    """Euclidean distance in LAB colour space."""
-
-    @staticmethod
-    def distance(lab1: np.ndarray, lab2: np.ndarray) -> float:
-        return np.sqrt(np.sum(np.power(lab1 - lab2, 2), axis=2))
-
-
-# class CCIR601Distance(ColourDistance):
-#     @staticmethod
-#     def _to_luma(rgb: np.ndarray):
-#         return rgb[0] * 0.299 + rgb[1] * 0.587 + rgb[2] * 0.114
-#
-#     def distance(self, rgb1: np.ndarray, rgb2: np.ndarray) -> float:
-#         delta_rgb = ((rgb1[0] - rgb2[0]) / 255, (rgb1[1] - rgb2[1]) / 255,
-#                      (rgb1[2] - rgb2[2]) / 255)
-#         luma_diff = (self._to_luma(rgb1) - self._to_luma(rgb2)) / 255
-#
-#         # TODO: this is the formula bmp2dhr uses but what motivates it?
-#         return (
-#                        delta_rgb[0] * delta_rgb[0] * 0.299 +
-#                        delta_rgb[1] * delta_rgb[1] * 0.587 +
-#                        delta_rgb[2] * delta_rgb[2] * 0.114) * 0.75 + (
-#                        luma_diff * luma_diff)
+    def distance(self, rgb: np.ndarray, bit4: np.ndarray) -> np.ndarray:
+        rgb24 = self._flatten_rgb(np.clip(rgb, 0, 255).astype(np.int))
+        return self._distances[rgb24, bit4].astype(np.int)
 
 
 class Screen:
@@ -247,13 +197,6 @@ class Screen:
     def pixel_palette_options(last_pixel, x: int):
         raise NotImplementedError
 
-    # @staticmethod
-    # def find_closest_color(
-    #         pixel, palette_options, palette_options_lab, differ:
-    #         ColourDistance):
-    #     best = np.argmin(differ.distance(pixel, palette_options_lab))
-    #     return palette_options[best]
-
 
 class DHGR140Screen(Screen):
     """DHGR screen ignoring colour fringing, i.e. treating as 140x192x16."""
@@ -275,10 +218,7 @@ class DHGR140Screen(Screen):
 
     @staticmethod
     def pixel_palette_options(last_pixel_4bit, x: int):
-        return (
-            np.array(list(RGB.keys())),
-            np.array(list(RGB.values())),
-            np.array(list(LAB.values())))
+        return np.array(list(RGB.keys())), np.array(list(RGB.values()))
 
 
 class DHGR560Screen(Screen):
@@ -306,27 +246,13 @@ class DHGR560Screen(Screen):
         other_pixel_4bit = DOTS_TO_4BIT[other_dots]
         return (
             np.array([last_pixel_4bit, other_pixel_4bit]),
-            np.array([RGB[last_pixel_4bit], RGB[other_pixel_4bit]]),
-            np.array([LAB[last_pixel_4bit], LAB[other_pixel_4bit]]))
-
-        # last_dots = DOTS[last_pixel_4bit]
-        # dots_zero = list(last_dots)
-        # dots_zero[x % 4] = False
-        # dots_one = list(last_dots)
-        # dots_one[x % 4] = True
-        # pixel_zero_4bit = DOTS_TO_4BIT[dots_zero]
-        # pixel_one_4bit = DOTS_TO_4BIT[dots_one]
-        # return (
-        #     np.array([pixel_zero_4bit, pixel_one_4bit]),
-        #     np.array([RGB[pixel_zero_4bit], RGB[pixel_one_4bit]]),
-        #     np.array([LAB[pixel_zero_4bit], LAB[pixel_one_4bit]]))
+            np.array([RGB[last_pixel_4bit], RGB[other_pixel_4bit]]))
 
 
 class Dither:
     PATTERN = None
     ORIGIN = None
 
-    # XXX extend image region to avoid need for boundary box clipping
     @functools.lru_cache(None)
     def x_dither_bounds(self, screen: Screen, x: int):
         pshape = self.PATTERN.shape
@@ -338,7 +264,8 @@ class Dither:
 
         return el, er, xl, xr
 
-    def y_dither_bounds(self, screen: Screen, y: int):
+    @functools.lru_cache(None)
+    def y_dither_bounds(self, screen: Screen, y: int, one_line=False):
         pshape = self.PATTERN.shape
         et = max(self.ORIGIN[0] - y, 0)
         eb = min(pshape[0], screen.Y_RES - 1 - y)
@@ -346,30 +273,39 @@ class Dither:
         yt = y - self.ORIGIN[0] + et
         yb = y - self.ORIGIN[0] + eb
 
+        if one_line:
+            yb = yt + 1
+            eb = et + 1
+
         return et, eb, yt, yb
 
     def apply(self, screen: Screen, image: np.ndarray, x: int, y: int,
               quant_error: np.ndarray, one_line=False):
-        pshape = self.PATTERN.shape
-        error = self.PATTERN.reshape(
-            (pshape[0], pshape[1], 1)) * quant_error.reshape((1, 1, 3))
+        error = self.PATTERN * quant_error.reshape((1, 1, 3))
         el, er, xl, xr = self.x_dither_bounds(screen, x)
-        et, eb, yt, yb = self.y_dither_bounds(screen, y)
-        if one_line:
-            yb = yt + 1
-            eb = et + 1
-        # TODO: compare without clipping here, i.e. allow RGB values to exceed
-        # 0-255 range
-        # print(image.dtype, error.dtype)
-        # print("quant_error=", self.PATTERN, error)
+        et, eb, yt, yb = self.y_dither_bounds(screen, y, one_line)
+
+        # We could avoid clipping here, i.e. allow RGB values to extend beyond
+        # 0..255 to capture a larger range of residual error.  This is faster
+        # but seems to reduce image quality.
+        # XXX extend image region to avoid need for boundary box clipping
         image[yt:yb, xl:xr, :] = np.clip(
             image[yt:yb, xl:xr, :] + error[et:eb, el:er, :], 0, 255)
+
+    def apply_one_line(self, screen: Screen, image: np.ndarray, x: int, y: int,
+                       quant_error: np.ndarray):
+        error = self.PATTERN[0, :] * quant_error.reshape(1, 3)
+        el, er, xl, xr = self.x_dither_bounds(screen, x)
+        image[y, xl:xr, :] = np.clip(
+            image[y, xl:xr, :] + error[el:er, :], 0, 255)
 
 
 class FloydSteinbergDither(Dither):
     # 0 * 7
     # 3 5 1
-    PATTERN = np.array(((0, 0, 7), (3, 5, 1))) / 16
+    PATTERN = np.array(((0, 0, 7), (3, 5, 1)),
+                       dtype=np.float32).reshape(2, 3, 1) / np.float(16)
+    # XXX X_ORIGIN since ORIGIN[0] == 0
     ORIGIN = (0, 1)
 
 
@@ -377,7 +313,8 @@ class BuckelsDither(Dither):
     # 0 * 2 1
     # 1 2 1 0
     # 0 1 0 0
-    PATTERN = np.array(((0, 0, 2, 1), (1, 2, 1, 0), (0, 1, 0, 0))) / 8
+    PATTERN = np.array(((0, 0, 2, 1), (1, 2, 1, 0), (0, 1, 0, 0)),
+                       dtype=np.float32).reshape(3, 4, 1) / np.float32(8)
     ORIGIN = (0, 1)
 
 
@@ -386,7 +323,7 @@ class JarvisDither(Dither):
     # 3 5 7 5 3
     # 1 3 5 3 1
     PATTERN = np.array(((0, 0, 0, 7, 5), (3, 5, 7, 5, 3), (1, 3, 5, 3, 1)),
-                       dtype=np.float32) / np.float32(48)
+                       dtype=np.float32).reshape(3, 5, 1) / np.float32(48)
     ORIGIN = (0, 2)
 
 
@@ -423,60 +360,26 @@ def open_image(screen: Screen, filename: str) -> np.ndarray:
 def lookahead_options(screen, lookahead, last_pixel_4bit, x):
     options_4bit = np.empty((2 ** lookahead, lookahead), dtype=np.uint8)
     options_rgb = np.empty((2 ** lookahead, lookahead, 3), dtype=np.float32)
-    # options_lab = np.empty((2 ** lookahead, lookahead, 3), dtype=np.float32)
     for i in range(2 ** lookahead):
         output_pixel_4bit = last_pixel_4bit
         for j in range(lookahead):
             xx = x + j
-            palette_choices_4bit, palette_choices_rgb, _ = \
+            palette_choices_4bit, palette_choices_rgb = \
                 screen.pixel_palette_options(output_pixel_4bit, xx)
             output_pixel_4bit = palette_choices_4bit[(i & (1 << j)) >> j]
             output_pixel_rgb = np.array(
                 palette_choices_rgb[(i & (1 << j)) >> j])
-            # output_pixel_lab = np.array(
-            #     palette_choices_lab[(i & (1 << j)) >> j])
             # XXX copy
             options_4bit[i, j] = output_pixel_4bit
-            # options_lab[i, j, :] = np.copy(output_pixel_lab)
             options_rgb[i, j, :] = np.copy(output_pixel_rgb)
 
-    return options_4bit, options_rgb  # , options_lab
-
-
-# def ideal_dither(
-#         screen: Screen, image_4bit: np.ndarray, image_rgb: np.ndarray,
-#         image_lab: np.ndarray, dither: Dither, differ: ColourDistance, x, y,
-#         lookahead) -> np.ndarray:
-#     et, eb, el, er, yt, yb, xl, xr = dither.dither_bounds(screen, x, y)
-#     # XXX tighten bounding box
-#     ideal_dither = np.empty_like(image_rgb)
-#     ideal_dither[yt:yb, :, :] = np.copy(image_rgb[yt:yb, :, :])
-#
-#     ideal_dither_lab = np.empty_like(image_lab)
-#     ideal_dither_lab[yt:yb, :, :] = np.copy(image_lab[yt:yb, :, :])
-#
-#     palette_choices = np.array(list(RGB.values()))
-#     palette_choices_lab = np.array(list(LAB.values()))
-#     for xx in range(x, min(max(x + lookahead, xr), screen.X_RES)):
-#         input_pixel = np.copy(ideal_dither[y, xx, :])
-#         input_pixel_lab = rgb_to_lab(np.clip(input_pixel), 0, 255)
-#         ideal_dither_lab[y, xx, :] = input_pixel_lab
-#         output_pixel = screen.find_closest_color(input_pixel_lab,
-#                                                  palette_choices,
-#                                                  palette_choices_lab,
-#                                                  differ)
-#         quant_error = input_pixel - output_pixel
-#         ideal_dither[y, xx, :] = output_pixel
-#         # XXX don't care about other y values
-#         dither.apply(screen, ideal_dither, xx, y, quant_error)
-#
-#     return ideal_dither_lab
+    return options_4bit, options_rgb
 
 
 def dither_lookahead(
         screen: Screen, image_rgb: np.ndarray, dither: Dither, differ:
         ColourDistance, x, y, last_pixel_4bit, lookahead
-) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+) -> Tuple[np.ndarray, np.ndarray]:
     el, er, xl, xr = dither.x_dither_bounds(screen, x)
 
     # X coord value of larger of dither bounding box or lookahead horizon
@@ -490,8 +393,6 @@ def dither_lookahead(
 
     options_4bit, options_rgb = lookahead_options(
         screen, lookahead, last_pixel_4bit, x % 4)
-    # print("options", options_4bit.dtype, options_rgb.dtype)
-    # print(options_4bit)
     for i in range(xxr - x):
         # options_rgb choices are fixed, but we can still distribute
         # quantization error from having made these choices, in order to compute
@@ -499,36 +400,27 @@ def dither_lookahead(
         input_pixels = np.copy(lah_image_rgb[:, i, :])
         output_pixels = options_rgb[:, i, :]
         quant_error = input_pixels - output_pixels
-        # print(quant_error.dtype)
         # Don't update the input at position x (since we've already chosen
         # fixed outputs), but do propagate quantization errors to positions >x
         # so we can compensate for how good/bad these choices were
         # XXX vectorize
         for j in range(2 ** lookahead):
             # print(quant_error[j])
-            dither.apply(
-                screen, lah_image_rgb[j, :, :].reshape(1, -1, 3),
-                i, 0, quant_error[j], one_line=True)
+            dither.apply_one_line(screen,
+                                  lah_image_rgb[j, :, :].reshape(1, -1, 3),
+                                  i, 0, quant_error[j])
 
-    # print("options=", options_rgb)
-    # print("rgb=",lah_image_rgb)
-    # lah_image_lab = rgb_to_lab(np.clip(lah_image_rgb[:, 0:lookahead, :], 0,
-    #                                   255))
-    #print("input=", image_rgb[y, x:xxr, :])
-    #print("options=", options_4bit)
-
-    #print("lah", np.clip(lah_image_rgb[:, 0:lookahead, :], 0, 255))
     error = differ.distance(np.clip(
         lah_image_rgb[:, 0:lookahead, :], 0, 255), options_4bit)
     # print(error.dtype)
     # print(lah_image_lab)
-    #print("error=", error)
+    # print("error=", error)
     # print(error.shape)
     total_error = np.sum(np.power(error, 2), axis=1)
-    #print("total_error=", total_error)
+    # print("total_error=", total_error)
     best = np.argmin(total_error)
-    #print("best=", best)
-    #print("best 4bit=", options_4bit[best, 0].item(), options_rgb[best, 0, :])
+    # print("best=", best)
+    # print("best 4bit=", options_4bit[best, 0].item(), options_rgb[best, 0, :])
     return options_4bit[best, 0].item(), options_rgb[best, 0, :]
 
 
@@ -537,36 +429,23 @@ def dither_image(
         ColourDistance, lookahead) -> Tuple[np.ndarray, np.ndarray]:
     image_4bit = np.empty(
         (image_rgb.shape[0], image_rgb.shape[1]), dtype=np.uint8)
-    # image_lab = rgb_to_lab(image_rgb)
+
+    # pattern = dither.PATTERN
 
     for y in range(screen.Y_RES):
         print(y)
         output_pixel_4bit = np.uint8(0)
-        # output_pixel_rgb = RGB[output_pixel_4bit]
         for x in range(screen.X_RES):
+        # for x in range(pattern.ORIGIN[1], pattern.ORIGIN[1] + screen.X_RES):
             input_pixel_rgb = np.copy(image_rgb[y, x, :])
-            # Make sure lookahead region is updated from previously applied
-            # dithering
-            # et, eb, el, er, yt, yb, xl, xr = dither.dither_bounds(screen,
-            # x, y)
-            # image_lab[y, x:xr, :] = rgb_to_lab(
-            #     np.clip(image_rgb[y, x:xr, :], 0, 255))
-
-            # ideal_lab = ideal_dither(screen, image_rgb, image_lab, dither,
-            #                         differ, x, y, lookahead)
             output_pixel_4bit, output_pixel_rgb = \
                 dither_lookahead(screen, image_rgb, dither, differ, x, y,
                                  output_pixel_4bit, lookahead)
             image_4bit[y, x] = output_pixel_4bit
             image_rgb[y, x, :] = output_pixel_rgb
-            # print(output_pixel_rgb, output_pixel_lab)
             quant_error = input_pixel_rgb - output_pixel_rgb
-            # print("quant_error=", quant_error)
-            # print("dither quant", quant_error.dtype)
             dither.apply(screen, image_rgb, x, y, quant_error)
 
-        # if y == 1:
-        #    return
     return image_4bit, image_rgb
 
 
@@ -591,8 +470,6 @@ def main():
     dither = JarvisDither()
 
     differ = CIE2000Distance()
-    # differ = LABEuclideanDistance()
-    # differ = CCIR601Distance()
 
     output_4bit, output_rgb = dither_image(screen, image, dither, differ,
                                            lookahead=args.lookahead)

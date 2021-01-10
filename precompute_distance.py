@@ -8,22 +8,31 @@ import numpy as np
 COLOURS = 256
 
 
+def rgb_to_lab(rgb: np.ndarray):
+    srgb = np.clip(
+        dither.linear_to_srgb_array(rgb.astype(np.float32) / 255), 0.0,
+        1.0)
+    xyz = colour.sRGB_to_XYZ(srgb)
+    return colour.XYZ_to_Lab(xyz)
+
+
 def nearest_colours():
     diffs = np.empty((COLOURS ** 3, 16), dtype=np.float32)
-
     all_rgb = np.array(tuple(np.ndindex(COLOURS, COLOURS, COLOURS)),
                        dtype=np.uint8)
-    all_srgb = dither.linear_to_srgb_array(all_rgb / 255)
-    all_xyz = colour.sRGB_to_XYZ(all_srgb)
-    all_lab = colour.XYZ_to_Lab(all_xyz)
+    all_lab = rgb_to_lab(all_rgb)
 
-    for i, p in dither.LAB.items():
+    for i, palette_rgb in dither.RGB.items():
         print(i)
-        diffs[:, i] = colour.difference.delta_E_CIE2000(all_lab, p)
+        palette_lab = rgb_to_lab(palette_rgb)
+        diffs[:, i] = colour.difference.delta_E_CIE2000(all_lab, palette_lab)
 
-    return diffs
+    norm = np.max(diffs)
+    print(norm)
+    return (diffs / norm * 255).astype(np.uint8)
+    #return diffs
 
 
 n = nearest_colours()
-with bz2.open("nearest.pickle.bz2", "wb") as f:
+with bz2.open("nearest2.pickle.bz2", "wb") as f:
     pickle.dump(n, f)
