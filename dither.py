@@ -7,7 +7,8 @@ from typing import Tuple
 
 from PIL import Image
 import numpy as np
-
+import pyximport; pyximport.install(language_level=3)
+import dither_apply
 
 # TODO:
 # - only lookahead for 560px
@@ -281,23 +282,28 @@ class Dither:
 
     def apply(self, screen: Screen, image: np.ndarray, x: int, y: int,
               quant_error: np.ndarray, one_line=False):
-        error = self.PATTERN * quant_error.reshape((1, 1, 3))
         el, er, xl, xr = self.x_dither_bounds(screen, x)
         et, eb, yt, yb = self.y_dither_bounds(screen, y, one_line)
-
-        # We could avoid clipping here, i.e. allow RGB values to extend beyond
-        # 0..255 to capture a larger range of residual error.  This is faster
-        # but seems to reduce image quality.
-        # XXX extend image region to avoid need for boundary box clipping
-        image[yt:yb, xl:xr, :] = np.clip(
-            image[yt:yb, xl:xr, :] + error[et:eb, el:er, :], 0, 255)
+        return dither_apply.apply(self.PATTERN, el, er, xl, xr, et, eb, yt,
+                                  yb, image, quant_error)
+        # error = self.PATTERN * quant_error.reshape((1, 1, 3))
+        #
+        # # We could avoid clipping here, i.e. allow RGB values to extend beyond
+        # # 0..255 to capture a larger range of residual error.  This is faster
+        # # but seems to reduce image quality.
+        # # XXX extend image region to avoid need for boundary box clipping
+        # image[yt:yb, xl:xr, :] = np.clip(
+        #     image[yt:yb, xl:xr, :] + error[et:eb, el:er, :], 0, 255)
 
     def apply_one_line(self, screen: Screen, image: np.ndarray, x: int, y: int,
                        quant_error: np.ndarray):
-        error = self.PATTERN[0, :] * quant_error.reshape(1, 3)
         el, er, xl, xr = self.x_dither_bounds(screen, x)
-        image[y, xl:xr, :] = np.clip(
-            image[y, xl:xr, :] + error[el:er, :], 0, 255)
+        return dither_apply.apply_one_line(self.PATTERN, el, er, xl, xr, y,
+                                           image, quant_error)
+        # error = self.PATTERN[0, :] * quant_error.reshape(1, 3)
+        #
+        # image[y, xl:xr, :] = np.clip(
+        #     image[y, xl:xr, :] + error[el:er, :], 0, 255)
 
 
 class FloydSteinbergDither(Dither):
