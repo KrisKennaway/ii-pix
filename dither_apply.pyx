@@ -50,27 +50,6 @@ cdef x_dither_bounds(float [:, :, ::1] pattern, int x_origin, int x_res, int x):
     return el, er, xl, xr
 
 
-cdef long* flatten_rgb(float [:, :, ::1] rgb):
-    cdef i, j, k
-    cdef long *flat = <long *> malloc(rgb.shape[0] * rgb.shape[1] * sizeof(long))
-    for i in range(rgb.shape[0]):
-        for j in range(rgb.shape[1]):
-            for k in range(rgb.shape[2]):
-                flat[i * rgb.shape[1] + j] = (int(rgb[i, j, 0]) << 16) + (int(rgb[i, j, 1]) << 8) + (int(rgb[i, j, 2]))
-    return flat
-
-
-cdef char* distance(char [:, ::1] distances, float [:, :, ::1] rgb, char [:, ::1] bit4):
-    flat = flatten_rgb(rgb)
-
-    cdef char *dist = <char *> malloc(rgb.shape[0] * rgb.shape[1] * sizeof(char))
-    for i in range(rgb.shape[0]):
-        for j in range(rgb.shape[1]):
-            dist[i * rgb.shape[1] + j] = distances[flat[i * rgb.shape[1] + j], bit4[i, j]]
-    free(flat)
-    return dist
-
-
 def dither_lookahead(
         screen, float[:,:,::1] image_rgb, dither, differ, int x, int y, char[:, ::1] options_4bit,
         float[:, :, ::1] options_rgb, int lookahead):
@@ -112,30 +91,29 @@ def dither_lookahead(
 
     free(quant_error)
 
-    # Clip lah_image_rgb into 0..255 range to prepare for computing colour distance
-    #for i in range(2**lookahead):
-    #    for j in range(lookahead):
-    #        for k in range(3):
-    #            lah_image_rgb[i, j, k] = clip(lah_image_rgb[i, j, k], 0, 255)
-
-    # cdef char* error = distance(differ._distances, lah_image_rgb[:, 0:lookahead, :], options_4bit)
-    # differ.distance(lah_image_rgb[:, 0:lookahead, :], options_4bit)
-    cdef long[:, ::1] error = differ.distance(lah_image_rgb[:, 0:lookahead, :], options_4bit)
     cdef int best
     cdef int best_error = 2**31-1
     cdef int total_error
+    cdef long flat, dist, bit4
+
+    cdef long r, g, b
+    cdef (unsigned char)[:, ::1] distances = differ._distances
     for i in range(2**lookahead):
         total_error = 0
         for j in range(lookahead):
-            total_error += error[i, j] ** 2
+            # Clip lah_image_rgb into 0..255 range to prepare for computing colour distance
+            r = long(clip(lah_image_rgb[i, j, 0], 0, 255))
+            g = long(clip(lah_image_rgb[i, j, 1], 0, 255))
+            b = long(clip(lah_image_rgb[i, j, 2], 0, 255))
+
+            flat = (r << 16) + (g << 8) + b
+            bit4 = options_4bit[i, j]
+            dist = distances[flat, bit4]
+            total_error += dist ** 2
             if total_error >= best_error:
                 break
         if total_error < best_error:
             best_error = total_error
             best = i
 
-    #cdef long[::1] total_error = np.sum(np.power(error, 2), axis=1)
-    #cdef int best = np.argmin(total_error)
-
-    # free(error)
     return options_4bit[best, 0], options_rgb[best, 0, :]

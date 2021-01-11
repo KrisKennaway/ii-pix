@@ -146,7 +146,7 @@ class CIE2000Distance(ColourDistance):
         return (rgb[..., 0] << 16) + (rgb[..., 1] << 8) + (rgb[..., 2])
 
     def distance(self, rgb: np.ndarray, bit4: np.ndarray) -> np.ndarray:
-        rgb24 = self._flatten_rgb(np.clip(rgb, 0, 255).astype(np.int))
+        rgb24 = self._flatten_rgb(rgb)
         return self._distances[rgb24, bit4].astype(np.int)
 
 
