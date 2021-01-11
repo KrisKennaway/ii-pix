@@ -3,8 +3,8 @@
 cimport cython
 import numpy as np
 # from cython.parallel import prange
-from cython.view cimport array as cvarray
-from libc.stdlib cimport malloc, free
+# from cython.view cimport array as cvarray
+# from libc.stdlib cimport malloc, free
 
 
 @cython.boundscheck(False)
@@ -15,7 +15,7 @@ cdef float clip(float a, float min_value, float max_value) nogil:
 
 @cython.boundscheck(False)
 @cython.wraparound(False)
-cdef apply_one_line(float[:, :, ::1] pattern, int xl, int xr, float[:, ::1] image, float[] quant_error):
+cdef void apply_one_line(float[:, :, ::1] pattern, int xl, int xr, float[:, ::1] image, float[] quant_error) nogil:
     cdef int i, j
     cdef float error
 
@@ -61,7 +61,7 @@ cdef x_dither_bounds(float [:, :, ::1] pattern, int x_origin, int x_res, int x):
 
 @cython.boundscheck(False)
 @cython.wraparound(False)
-def y_dither_bounds(float [:, :, ::1] pattern, int y_origin, int y_res, int y):
+cdef y_dither_bounds(float [:, :, ::1] pattern, int y_origin, int y_res, int y):
     pshape = pattern.shape
     et = max(y_origin - y, 0)
     eb = min(pshape[0], y_res - 1 - y)
