@@ -4,6 +4,7 @@ cimport cython
 import numpy as np
 # from cython.parallel import prange
 from cython.view cimport array as cvarray
+from libc.stdlib cimport malloc, free
 
 
 cdef float clip(float a, float min_value, float max_value) nogil:
@@ -15,16 +16,19 @@ cdef float clip(float a, float min_value, float max_value) nogil:
 def apply_one_line(float[:, :, ::1] pattern, int el, int er, int xl, int xr, int y, float[:, :, ::1] image,
                    float[::1] quant_error):
     cdef int i, j
-    cdef float[:, ::1] error = cvarray(
-        shape=(pattern.shape[1], quant_error.shape[0]), itemsize=sizeof(float), format="f")
+    cdef float *error = <float *> malloc(pattern.shape[1] * quant_error.shape[0] * sizeof(float))
+
+    #cdef float[:, ::1] error = cvarray(
+    #    shape=(pattern.shape[1], quant_error.shape[0]), itemsize=sizeof(float), format="f")
 
     for i in range(pattern.shape[1]):
         for j in range(quant_error.shape[0]):
-            error[i, j] = pattern[0, i, 0] * quant_error[j]
+            error[i * quant_error.shape[0] + j] = pattern[0, i, 0] * quant_error[j]
 
     for i in range(xr - xl):
         for j in range(3):
-            image[y, xl+i, j] = clip(image[y, xl + i, j] + error[el + i, j], 0, 255)
+            image[y, xl+i, j] = clip(image[y, xl + i, j] + error[(el + i) * quant_error.shape[0] + j], 0, 255)
+    free(error)
 
 
 # XXX cythonize
