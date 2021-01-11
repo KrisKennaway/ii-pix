@@ -7,39 +7,41 @@ from cython.view cimport array as cvarray
 from libc.stdlib cimport malloc, free
 
 
+@cython.boundscheck(False)
+@cython.wraparound(False)
 cdef float clip(float a, float min_value, float max_value) nogil:
     return min(max(a, min_value), max_value)
 
 
-#@cython.boundscheck(False)
-#@cython.wraparound(False)
+@cython.boundscheck(False)
+@cython.wraparound(False)
 cdef apply_one_line(float[:, :, ::1] pattern, int el, int er, int xl, int xr, int y, float[:, ::1] image,
                    float[] quant_error):
     cdef int i, j
-    cdef float *error = <float *> malloc(pattern.shape[1] * 3 * sizeof(float))
-
-    for i in range(pattern.shape[1]):
-        for j in range(3):
-            error[i * 3 + j] = pattern[0, i, 0] * quant_error[j]
+    cdef float error
 
     for i in range(xr - xl):
         for j in range(3):
-            image[xl+i, j] = clip(image[xl + i, j] + error[(el + i) * 3 + j], 0, 255)
-    free(error)
+            error = pattern[0, i, 0] * quant_error[j]
+            image[xl+i, j] = clip(image[xl + i, j] + error, 0, 255)
 
 
-# XXX cythonize
-def apply(pattern, int el, int er, int xl, int xr, int et, int eb, int yt, int yb, image, quant_error):
-    error = pattern * quant_error.reshape((1, 1, 3))
+def apply(float[:, :, ::1] pattern, int el, int er, int xl, int xr, int et, int eb, int yt, int yb, float [:, :, ::1]image, float[::1] quant_error):
+    cdef int i, j, k
 
+    cdef float error
     # We could avoid clipping here, i.e. allow RGB values to extend beyond
     # 0..255 to capture a larger range of residual error.  This is faster
     # but seems to reduce image quality.
-    # XXX extend image region to avoid need for boundary box clipping
-    image[yt:yb, xl:xr, :] = np.clip(
-        image[yt:yb, xl:xr, :] + error[et:eb, el:er, :], 0, 255)
+    for i in range(yb - yt):
+        for j in range(xr - xl):
+            for k in range(3):
+                error = pattern[i, j, 0] * quant_error[k]
+                image[yt+i, xl+j, k] = clip(image[yt+i, xl+j, k] + error, 0, 255)
 
 
+@cython.boundscheck(False)
+@cython.wraparound(False)
 cdef x_dither_bounds(float [:, :, ::1] pattern, int x_origin, int x_res, int x):
     cdef int el = max(x_origin - x, 0)
     cdef int er = min(pattern.shape[1], x_res - 1 - x)
@@ -50,6 +52,8 @@ cdef x_dither_bounds(float [:, :, ::1] pattern, int x_origin, int x_res, int x):
     return el, er, xl, xr
 
 
+@cython.boundscheck(False)
+@cython.wraparound(False)
 def dither_lookahead(
         screen, float[:,:,::1] image_rgb, dither, differ, int x, int y, char[:, ::1] options_4bit,
         float[:, :, ::1] options_rgb, int lookahead):
@@ -65,6 +69,7 @@ def dither_lookahead(
 
     # Copies of input pixels so we can dither in bulk
     # Leave enough space at right of image so we can dither the last of our lookahead pixels
+    # XXX opt
     cdef float[:, :, ::1] lah_image_rgb = np.zeros(
         (2 ** lookahead, lookahead + xr - xl, 3), dtype=np.float32)
     lah_image_rgb[:, 0:xxr - x, :] = image_rgb[y, x:xxr, :]
