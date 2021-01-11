@@ -13,21 +13,18 @@ cdef float clip(float a, float min_value, float max_value) nogil:
 
 #@cython.boundscheck(False)
 #@cython.wraparound(False)
-def apply_one_line(float[:, :, ::1] pattern, int el, int er, int xl, int xr, int y, float[:, ::1] image,
-                   float[::1] quant_error):
+cdef apply_one_line(float[:, :, ::1] pattern, int el, int er, int xl, int xr, int y, float[:, ::1] image,
+                   float[] quant_error):
     cdef int i, j
-    cdef float *error = <float *> malloc(pattern.shape[1] * quant_error.shape[0] * sizeof(float))
-
-    #cdef float[:, ::1] error = cvarray(
-    #    shape=(pattern.shape[1], quant_error.shape[0]), itemsize=sizeof(float), format="f")
+    cdef float *error = <float *> malloc(pattern.shape[1] * 3 * sizeof(float))
 
     for i in range(pattern.shape[1]):
-        for j in range(quant_error.shape[0]):
-            error[i * quant_error.shape[0] + j] = pattern[0, i, 0] * quant_error[j]
+        for j in range(3):
+            error[i * 3 + j] = pattern[0, i, 0] * quant_error[j]
 
     for i in range(xr - xl):
         for j in range(3):
-            image[xl+i, j] = clip(image[xl + i, j] + error[(el + i) * quant_error.shape[0] + j], 0, 255)
+            image[xl+i, j] = clip(image[xl + i, j] + error[(el + i) * 3 + j], 0, 255)
     free(error)
 
 
@@ -73,31 +70,35 @@ def dither_lookahead(
 
     # copies of input pixels so we can dither in bulk
     # Leave enough space so we can dither the last of our lookahead pixels
-    lah_image_rgb = np.zeros(
+    cdef float[:, :, ::1] lah_image_rgb = np.zeros(
         (2 ** lookahead, lookahead + xr - xl, 3), dtype=np.float32)
-    lah_image_rgb[:, 0:xxr - x, :] = np.copy(image_rgb[y, x:xxr, :])
-
-    #cdef float[:, :, ::1] lah_image_rgb_view = lah_image_rgb
-    #cdef float[:, :, ::1] options_rgb_view = options_rgb
+    # X
+    lah_image_rgb[:, 0:xxr - x, :] = image_rgb[y, x:xxr, :]
 
     cdef float[:, ::] output_pixels
-    cdef float[:, ::1] quant_error
+    cdef float *quant_error = <float *> malloc(2 ** lookahead * 3 * sizeof(float))
 
-    cdef int i, j
+    cdef int i, j, k, l
+
+    cdef int[:, :, ::1] pattern = dither.PATTERN
     for i in range(xxr - x):
         # options_rgb choices are fixed, but we can still distribute
         # quantization error from having made these choices, in order to compute
         # the total error
-        input_pixels = np.copy(lah_image_rgb[:, i, :])
-        output_pixels = options_rgb[:, i, :]
-        quant_error = input_pixels - output_pixels
+        for k in range(2 ** lookahead):
+            for l in range(3):
+                quant_error[k * 3 + l] = lah_image_rgb[k, i, l] - options_rgb[k, i, l]
+
         # Don't update the input at position x (since we've already chosen
         # fixed outputs), but do propagate quantization errors to positions >x
         # so we can compensate for how good/bad these choices were
         el, er, xl, xr = x_dither_bounds(dither, screen, i)
         for j in range(2 ** lookahead):
-            apply_one_line(dither.PATTERN, el, er, xl, xr, 0, lah_image_rgb[j, :, :], quant_error[j])
+            apply_one_line(pattern, el, er, xl, xr, 0, lah_image_rgb[j, :, :], &quant_error[j])
 
+    free(quant_error)
+
+    # XXX opt
     error = differ.distance(np.clip(
         lah_image_rgb[:, 0:lookahead, :], 0, 255), options_4bit)
     total_error = np.sum(np.power(error, 2), axis=1)
