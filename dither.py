@@ -7,8 +7,11 @@ from typing import Tuple
 
 from PIL import Image
 import numpy as np
-import pyximport; pyximport.install(language_level=3)
+import pyximport;
+
+pyximport.install(language_level=3)
 import dither_apply
+
 
 # TODO:
 # - only lookahead for 560px
@@ -442,11 +445,16 @@ def dither_image(
         print(y)
         output_pixel_4bit = np.uint8(0)
         for x in range(screen.X_RES):
-        # for x in range(pattern.ORIGIN[1], pattern.ORIGIN[1] + screen.X_RES):
+            # for x in range(pattern.ORIGIN[1], pattern.ORIGIN[1] + screen.X_RES):
             input_pixel_rgb = np.copy(image_rgb[y, x, :])
+            options_4bit, options_rgb = lookahead_options(
+                screen, lookahead, output_pixel_4bit, x % 4)
+
             output_pixel_4bit, output_pixel_rgb = \
-                dither_lookahead(screen, image_rgb, dither, differ, x, y,
-                                 output_pixel_4bit, lookahead)
+                dither_apply.dither_lookahead(
+                    screen, image_rgb, dither, differ, x, y, options_4bit,
+                    options_rgb,
+                    lookahead)
             image_4bit[y, x] = output_pixel_4bit
             image_rgb[y, x, :] = output_pixel_rgb
             quant_error = input_pixel_rgb - output_pixel_rgb
