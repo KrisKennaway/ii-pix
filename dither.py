@@ -285,10 +285,9 @@ class Dither:
 
     def apply(self, screen: Screen, image: np.ndarray, x: int, y: int,
               quant_error: np.ndarray, one_line=False):
-        el, er, xl, xr = self.x_dither_bounds(screen, x)
-        et, eb, yt, yb = self.y_dither_bounds(screen, y, one_line)
-        return dither_apply.apply(self.PATTERN, el, er, xl, xr, et, eb, yt,
-                                  yb, image, quant_error)
+        #el, er, xl, xr = self.x_dither_bounds(screen, x)
+        #et, eb, yt, yb = self.y_dither_bounds(screen, y, one_line)
+        return dither_apply.apply(self, screen, x, y, image, quant_error)
         # error = self.PATTERN * quant_error.reshape((1, 1, 3))
         #
         # # We could avoid clipping here, i.e. allow RGB values to extend beyond
@@ -445,7 +444,6 @@ def dither_image(
         print(y)
         output_pixel_4bit = np.uint8(0)
         for x in range(screen.X_RES):
-            # for x in range(pattern.ORIGIN[1], pattern.ORIGIN[1] + screen.X_RES):
             input_pixel_rgb = np.copy(image_rgb[y, x, :])
             options_4bit, options_rgb = lookahead_options(
                 screen, lookahead, output_pixel_4bit, x % 4)

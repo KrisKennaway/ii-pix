@@ -15,8 +15,7 @@ cdef float clip(float a, float min_value, float max_value) nogil:
 
 @cython.boundscheck(False)
 @cython.wraparound(False)
-cdef apply_one_line(float[:, :, ::1] pattern, int el, int er, int xl, int xr, int y, float[:, ::1] image,
-                   float[] quant_error):
+cdef apply_one_line(float[:, :, ::1] pattern, int xl, int xr, float[:, ::1] image, float[] quant_error):
     cdef int i, j
     cdef float error
 
@@ -26,8 +25,16 @@ cdef apply_one_line(float[:, :, ::1] pattern, int el, int er, int xl, int xr, in
             image[xl+i, j] = clip(image[xl + i, j] + error, 0, 255)
 
 
-def apply(float[:, :, ::1] pattern, int el, int er, int xl, int xr, int et, int eb, int yt, int yb, float [:, :, ::1]image, float[::1] quant_error):
+@cython.boundscheck(False)
+@cython.wraparound(False)
+def apply(dither, screen, int x, int y, float [:, :, ::1]image, float[::1] quant_error):
     cdef int i, j, k
+
+    # XXX only need 2 dimensions now
+    cdef float[:, :, ::1] pattern = dither.PATTERN
+    cdef int yt, yb, xl, xr
+    yt, yb = y_dither_bounds(pattern, dither.ORIGIN[0], screen.Y_RES, y)
+    xl, xr = x_dither_bounds(pattern, dither.ORIGIN[1], screen.X_RES, x)
 
     cdef float error
     # We could avoid clipping here, i.e. allow RGB values to extend beyond
@@ -49,8 +56,21 @@ cdef x_dither_bounds(float [:, :, ::1] pattern, int x_origin, int x_res, int x):
     cdef int xl = x - x_origin + el
     cdef int xr = x - x_origin + er
 
-    return el, er, xl, xr
+    return xl, xr
 
+
+@cython.boundscheck(False)
+@cython.wraparound(False)
+def y_dither_bounds(float [:, :, ::1] pattern, int y_origin, int y_res, int y):
+    pshape = pattern.shape
+    et = max(y_origin - y, 0)
+    eb = min(pshape[0], y_res - 1 - y)
+
+    yt = y - y_origin + et
+    yb = y - y_origin + eb
+
+
+    return yt, yb
 
 @cython.boundscheck(False)
 @cython.wraparound(False)
@@ -61,40 +81,42 @@ def dither_lookahead(
     cdef int x_res = screen.X_RES
     cdef int dither_x_origin = dither.ORIGIN[1]
 
-    cdef int el, er, xl, xr
-    el, er, xl, xr = x_dither_bounds(pattern, dither_x_origin, x_res, x)
+    cdef int xl, xr
+    xl, xr = x_dither_bounds(pattern, dither_x_origin, x_res, x)
 
     # X coord value of larger of dither bounding box or lookahead horizon
     cdef int xxr = min(max(x + lookahead, xr), x_res)
 
-    # Copies of input pixels so we can dither in bulk
-    # Leave enough space at right of image so we can dither the last of our lookahead pixels
-    # XXX opt
-    cdef float[:, :, ::1] lah_image_rgb = np.zeros(
-        (2 ** lookahead, lookahead + xr - xl, 3), dtype=np.float32)
-    lah_image_rgb[:, 0:xxr - x, :] = image_rgb[y, x:xxr, :]
-
-    cdef float[:, ::] output_pixels
-    cdef float *quant_error = <float *> malloc(2 ** lookahead * 3 * sizeof(float))
-
     cdef int i, j, k, l
 
+    cdef float[:, :, ::1] lah_image_rgb = np.empty(
+        (2 ** lookahead, lookahead + xr - xl, 3), dtype=np.float32)
+    for i in range(2**lookahead):
+        # Copies of input pixels so we can dither in bulk
+        for j in range(xxr - x):
+            for k in range(3):
+                lah_image_rgb[i, j, k] = image_rgb[y, x+j, k]
+                # lah_image_rgb[:, 0:xxr - x, :] = image_rgb[y, x:xxr, :]
+        # Leave enough space at right of image so we can dither the last of our lookahead pixels.
+        for j in range(xxr - x, lookahead + xr - xl):
+            for k in range(3):
+                lah_image_rgb[i, j, k] = 0
+    cdef float[3] quant_error
+
+    # Iterating by row then column is faster for some reason?
     for i in range(xxr - x):
-        # options_rgb choices are fixed, but we can still distribute
-        # quantization error from having made these choices, in order to compute
-        # the total error
-        for k in range(2 ** lookahead):
-            for l in range(3):
-                quant_error[k * 3 + l] = lah_image_rgb[k, i, l] - options_rgb[k, i, l]
-
-        # Don't update the input at position x (since we've already chosen
-        # fixed outputs), but do propagate quantization errors to positions >x
-        # so we can compensate for how good/bad these choices were
-        el, er, xl, xr = x_dither_bounds(pattern, dither_x_origin, x_res, i)
+        xl, xr = x_dither_bounds(pattern, dither_x_origin, x_res, i)
         for j in range(2 ** lookahead):
-            apply_one_line(pattern, el, er, xl, xr, 0, lah_image_rgb[j, :, :], &quant_error[j])
+            # Don't update the input at position x (since we've already chosen
+            # fixed outputs), but do propagate quantization errors to positions >x
+            # so we can compensate for how good/bad these choices were
 
-    free(quant_error)
+            # options_rgb choices are fixed, but we can still distribute
+            # quantization error from having made these choices, in order to compute
+            # the total error
+            for k in range(3):
+                quant_error[k] = lah_image_rgb[j, i, k] - options_rgb[j, i, k]
+            apply_one_line(pattern, xl, xr, lah_image_rgb[j, :, :], quant_error)
 
     cdef int best
     cdef int best_error = 2**31-1
