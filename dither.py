@@ -7,9 +7,6 @@ from typing import Tuple
 
 from PIL import Image
 import numpy as np
-import pyximport;
-
-pyximport.install(language_level=3)
 import dither_apply
 
 
@@ -438,8 +435,6 @@ def dither_image(
     image_4bit = np.empty(
         (image_rgb.shape[0], image_rgb.shape[1]), dtype=np.uint8)
 
-    # pattern = dither.PATTERN
-
     for y in range(screen.Y_RES):
         print(y)
         output_pixel_4bit = np.uint8(0)
@@ -456,7 +451,7 @@ def dither_image(
             image_4bit[y, x] = output_pixel_4bit
             image_rgb[y, x, :] = output_pixel_rgb
             quant_error = input_pixel_rgb - output_pixel_rgb
-            dither.apply(screen, image_rgb, x, y, quant_error)
+            dither_apply.apply(dither, screen, x, y, image_rgb, quant_error)
 
     return image_4bit, image_rgb
 

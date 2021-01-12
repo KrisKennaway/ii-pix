@@ -22,7 +22,7 @@ cdef void apply_one_line(float[:, :, ::1] pattern, int xl, int xr, float[:, ::1]
     for i in range(xr - xl):
         for j in range(3):
             error = pattern[0, i, 0] * quant_error[j]
-            image[xl+i, j] = clip(image[xl + i, j] + error, 0, 255)
+            image[xl + i, j] = clip(image[xl + i, j] + error, 0, 255)
 
 
 @cython.boundscheck(False)
@@ -96,13 +96,12 @@ def dither_lookahead(
         for j in range(xxr - x):
             for k in range(3):
                 lah_image_rgb[i, j, k] = image_rgb[y, x+j, k]
-                # lah_image_rgb[:, 0:xxr - x, :] = image_rgb[y, x:xxr, :]
         # Leave enough space at right of image so we can dither the last of our lookahead pixels.
         for j in range(xxr - x, lookahead + xr - xl):
             for k in range(3):
                 lah_image_rgb[i, j, k] = 0
-    cdef float[3] quant_error
 
+    cdef float[3] quant_error
     # Iterating by row then column is faster for some reason?
     for i in range(xxr - x):
         xl, xr = x_dither_bounds(pattern, dither_x_origin, x_res, i)
@@ -129,9 +128,9 @@ def dither_lookahead(
         total_error = 0
         for j in range(lookahead):
             # Clip lah_image_rgb into 0..255 range to prepare for computing colour distance
-            r = long(clip(lah_image_rgb[i, j, 0], 0, 255))
-            g = long(clip(lah_image_rgb[i, j, 1], 0, 255))
-            b = long(clip(lah_image_rgb[i, j, 2], 0, 255))
+            r = <long>clip(lah_image_rgb[i, j, 0], 0, 255)
+            g = <long>clip(lah_image_rgb[i, j, 1], 0, 255)
+            b = <long>clip(lah_image_rgb[i, j, 2], 0, 255)
 
             flat = (r << 16) + (g << 8) + b
             bit4 = options_4bit[i, j]
