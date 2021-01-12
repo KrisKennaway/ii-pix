@@ -174,8 +174,8 @@ def lookahead_options(screen, lookahead, last_pixel_4bit, x):
 @cython.boundscheck(False)
 @cython.wraparound(False)
 def dither_image(
-        screen, float [:, :, ::1] image_rgb, dither, differ, int lookahead):
-    image_4bit = np.empty(
+        screen, float[:, :, ::1] image_rgb, dither, differ, int lookahead):
+    cdef (unsigned char)[:, ::1] image_4bit = np.empty(
         (image_rgb.shape[0], image_rgb.shape[1]), dtype=np.uint8)
 
     cdef int yres = screen.Y_RES
@@ -185,10 +185,12 @@ def dither_image(
     cdef float[3] quant_error
     cdef (unsigned char)[:, ::1] options_4bit
     cdef float[:, :, ::1] options_rgb
+    cdef unsigned char output_pixel_4bit
+    cdef float[::1] input_pixel_rgb
 
     for y in range(yres):
         # print(y)
-        output_pixel_4bit = np.uint8(0)
+        output_pixel_4bit = 0
         for x in range(xres):
             input_pixel_rgb = image_rgb[y, x, :]
             options_4bit, options_rgb = lookahead_options(
@@ -205,4 +207,3 @@ def dither_image(
             apply(dither, screen, x, y, image_rgb, quant_error)
 
     return image_4bit, np.array(image_rgb)
-

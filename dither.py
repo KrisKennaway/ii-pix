@@ -137,14 +137,6 @@ class CIE2000Distance(ColourDistance):
     def __init__(self):
         self._distances = np.memmap("distances.npy", mode="r+",
                                     dtype=np.uint8, shape=(16777216, 16))
-    #
-    # @staticmethod
-    # def _flatten_rgb(rgb):
-    #     return (rgb[..., 0] << 16) + (rgb[..., 1] << 8) + (rgb[..., 2])
-    #
-    # def distance(self, rgb: np.ndarray, bit4: np.ndarray) -> np.ndarray:
-    #     rgb24 = self._flatten_rgb(rgb)
-    #     return self._distances[rgb24, bit4].astype(np.int)
 
 
 class Screen:
@@ -232,7 +224,7 @@ class DHGR560Screen(Screen):
         bitmap = np.zeros((self.Y_RES, self.X_RES), dtype=np.bool)
         for y in range(self.Y_RES):
             for x in range(self.X_RES):
-                pixel = image_4bit[y, x].item()
+                pixel = image_4bit[y, x]
                 dots = DOTS[pixel]
                 phase = x % 4
                 bitmap[y, x] = dots[phase]
@@ -253,56 +245,6 @@ class DHGR560Screen(Screen):
 class Dither:
     PATTERN = None
     ORIGIN = None
-
-    @functools.lru_cache(None)
-    def x_dither_bounds(self, screen: Screen, x: int):
-        pshape = self.PATTERN.shape
-        el = max(self.ORIGIN[1] - x, 0)
-        er = min(pshape[1], screen.X_RES - 1 - x)
-
-        xl = x - self.ORIGIN[1] + el
-        xr = x - self.ORIGIN[1] + er
-
-        return el, er, xl, xr
-
-    @functools.lru_cache(None)
-    def y_dither_bounds(self, screen: Screen, y: int, one_line=False):
-        pshape = self.PATTERN.shape
-        et = max(self.ORIGIN[0] - y, 0)
-        eb = min(pshape[0], screen.Y_RES - 1 - y)
-
-        yt = y - self.ORIGIN[0] + et
-        yb = y - self.ORIGIN[0] + eb
-
-        if one_line:
-            yb = yt + 1
-            eb = et + 1
-
-        return et, eb, yt, yb
-
-    def apply(self, screen: Screen, image: np.ndarray, x: int, y: int,
-              quant_error: np.ndarray, one_line=False):
-        # el, er, xl, xr = self.x_dither_bounds(screen, x)
-        # et, eb, yt, yb = self.y_dither_bounds(screen, y, one_line)
-        return dither_apply.apply(self, screen, x, y, image, quant_error)
-        # error = self.PATTERN * quant_error.reshape((1, 1, 3))
-        #
-        # # We could avoid clipping here, i.e. allow RGB values to extend beyond
-        # # 0..255 to capture a larger range of residual error.  This is faster
-        # # but seems to reduce image quality.
-        # # XXX extend image region to avoid need for boundary box clipping
-        # image[yt:yb, xl:xr, :] = np.clip(
-        #     image[yt:yb, xl:xr, :] + error[et:eb, el:er, :], 0, 255)
-
-    def apply_one_line(self, screen: Screen, image: np.ndarray, x: int, y: int,
-                       quant_error: np.ndarray):
-        el, er, xl, xr = self.x_dither_bounds(screen, x)
-        return dither_apply.apply_one_line(self.PATTERN, el, er, xl, xr, y,
-                                           image, quant_error)
-        # error = self.PATTERN[0, :] * quant_error.reshape(1, 3)
-        #
-        # image[y, xl:xr, :] = np.clip(
-        #     image[y, xl:xr, :] + error[el:er, :], 0, 255)
 
 
 class FloydSteinbergDither(Dither):
@@ -341,88 +283,11 @@ def open_image(screen: Screen, filename: str) -> np.ndarray:
 
     # Convert to linear RGB before rescaling so that colour interpolation is
     # in linear space
-    # XXX opt?
-    linear = srgb_to_linear(np.array(im, dtype=np.float32))
-    rescaled = Image.fromarray(
-        linear.astype(np.uint8)).resize(
+    linear = srgb_to_linear(np.asarray(im)).astype(np.uint8)
+    rescaled = Image.fromarray(linear).resize(
         (screen.X_RES, screen.Y_RES), Image.LANCZOS)
     # XXX work with malloc'ed array?
-    return np.array(rescaled, dtype=np.float32)
-
-
-def dither_lookahead(
-        screen: Screen, image_rgb: np.ndarray, dither: Dither, differ:
-        ColourDistance, x, y, last_pixel_4bit, lookahead
-) -> Tuple[np.ndarray, np.ndarray]:
-    el, er, xl, xr = dither.x_dither_bounds(screen, x)
-
-    # X coord value of larger of dither bounding box or lookahead horizon
-    xxr = min(max(x + lookahead, xr), screen.X_RES)
-
-    # copies of input pixels so we can dither in bulk
-    # Leave enough space so we can dither the last of our lookahead pixels
-    lah_image_rgb = np.zeros(
-        (2 ** lookahead, lookahead + xr - xl, 3), dtype=np.float32)
-    lah_image_rgb[:, 0:xxr - x, :] = np.copy(image_rgb[y, x:xxr, :])
-
-    options_4bit, options_rgb = lookahead_options(
-        screen, lookahead, last_pixel_4bit, x % 4)
-    for i in range(xxr - x):
-        # options_rgb choices are fixed, but we can still distribute
-        # quantization error from having made these choices, in order to compute
-        # the total error
-        input_pixels = np.copy(lah_image_rgb[:, i, :])
-        output_pixels = options_rgb[:, i, :]
-        quant_error = input_pixels - output_pixels
-        # Don't update the input at position x (since we've already chosen
-        # fixed outputs), but do propagate quantization errors to positions >x
-        # so we can compensate for how good/bad these choices were
-        # XXX vectorize
-        for j in range(2 ** lookahead):
-            # print(quant_error[j])
-            dither.apply_one_line(screen,
-                                  lah_image_rgb[j, :, :].reshape(1, -1, 3),
-                                  i, 0, quant_error[j])
-
-    error = differ.distance(np.clip(
-        lah_image_rgb[:, 0:lookahead, :], 0, 255), options_4bit)
-    # print(error.dtype)
-    # print(lah_image_lab)
-    # print("error=", error)
-    # print(error.shape)
-    total_error = np.sum(np.power(error, 2), axis=1)
-    # print("total_error=", total_error)
-    best = np.argmin(total_error)
-    # print("best=", best)
-    # print("best 4bit=", options_4bit[best, 0].item(), options_rgb[best, 0, :])
-    return options_4bit[best, 0].item(), options_rgb[best, 0, :]
-
-
-def dither_image(
-        screen: Screen, image_rgb: np.ndarray, dither: Dither, differ:
-        ColourDistance, lookahead) -> Tuple[np.ndarray, np.ndarray]:
-    image_4bit = np.empty(
-        (image_rgb.shape[0], image_rgb.shape[1]), dtype=np.uint8)
-
-    for y in range(screen.Y_RES):
-        print(y)
-        output_pixel_4bit = np.uint8(0)
-        for x in range(screen.X_RES):
-            input_pixel_rgb = image_rgb[y, x, :]
-            options_4bit, options_rgb = lookahead_options(
-                screen, lookahead, output_pixel_4bit, x % 4)
-
-            output_pixel_4bit, output_pixel_rgb = \
-                dither_apply.dither_lookahead(
-                    screen, image_rgb, dither, differ, x, y, options_4bit,
-                    options_rgb,
-                    lookahead)
-            quant_error = input_pixel_rgb - output_pixel_rgb
-            image_4bit[y, x] = output_pixel_4bit
-            image_rgb[y, x, :] = output_pixel_rgb
-            dither_apply.apply(dither, screen, x, y, image_rgb, quant_error)
-
-    return image_4bit, image_rgb
+    return np.array(rescaled).astype(np.float32)
 
 
 def main():
