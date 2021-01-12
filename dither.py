@@ -135,17 +135,16 @@ class CIE2000Distance(ColourDistance):
     """CIE2000 delta-E distance."""
 
     def __init__(self):
-        with bz2.open("nearest.pickle.bz2", "rb") as f:
-            self._distances = pickle.load(f)
-            assert self._distances.dtype == np.uint8
-
-    @staticmethod
-    def _flatten_rgb(rgb):
-        return (rgb[..., 0] << 16) + (rgb[..., 1] << 8) + (rgb[..., 2])
-
-    def distance(self, rgb: np.ndarray, bit4: np.ndarray) -> np.ndarray:
-        rgb24 = self._flatten_rgb(rgb)
-        return self._distances[rgb24, bit4].astype(np.int)
+        self._distances = np.memmap("distances.npy", mode="r+",
+                                    dtype=np.uint8, shape=(16777216, 16))
+    #
+    # @staticmethod
+    # def _flatten_rgb(rgb):
+    #     return (rgb[..., 0] << 16) + (rgb[..., 1] << 8) + (rgb[..., 2])
+    #
+    # def distance(self, rgb: np.ndarray, bit4: np.ndarray) -> np.ndarray:
+    #     rgb24 = self._flatten_rgb(rgb)
+    #     return self._distances[rgb24, bit4].astype(np.int)
 
 
 class Screen:
@@ -342,10 +341,12 @@ def open_image(screen: Screen, filename: str) -> np.ndarray:
 
     # Convert to linear RGB before rescaling so that colour interpolation is
     # in linear space
+    # XXX opt?
     linear = srgb_to_linear(np.array(im, dtype=np.float32))
     rescaled = Image.fromarray(
         linear.astype(np.uint8)).resize(
         (screen.X_RES, screen.Y_RES), Image.LANCZOS)
+    # XXX work with malloc'ed array?
     return np.array(rescaled, dtype=np.float32)
 
 
