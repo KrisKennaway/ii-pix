@@ -3,6 +3,7 @@ import bz2
 import functools
 import os.path
 import pickle
+import time
 from typing import Tuple
 
 from PIL import Image
@@ -282,8 +283,8 @@ class Dither:
 
     def apply(self, screen: Screen, image: np.ndarray, x: int, y: int,
               quant_error: np.ndarray, one_line=False):
-        #el, er, xl, xr = self.x_dither_bounds(screen, x)
-        #et, eb, yt, yb = self.y_dither_bounds(screen, y, one_line)
+        # el, er, xl, xr = self.x_dither_bounds(screen, x)
+        # et, eb, yt, yb = self.y_dither_bounds(screen, y, one_line)
         return dither_apply.apply(self, screen, x, y, image, quant_error)
         # error = self.PATTERN * quant_error.reshape((1, 1, 3))
         #
@@ -361,26 +362,6 @@ def open_image(screen: Screen, filename: str) -> np.ndarray:
         SRGBResize(im, (screen.X_RES, screen.Y_RES), Image.LANCZOS))
 
 
-@functools.lru_cache(None)
-def lookahead_options(screen, lookahead, last_pixel_4bit, x):
-    options_4bit = np.empty((2 ** lookahead, lookahead), dtype=np.uint8)
-    options_rgb = np.empty((2 ** lookahead, lookahead, 3), dtype=np.float32)
-    for i in range(2 ** lookahead):
-        output_pixel_4bit = last_pixel_4bit
-        for j in range(lookahead):
-            xx = x + j
-            palette_choices_4bit, palette_choices_rgb = \
-                screen.pixel_palette_options(output_pixel_4bit, xx)
-            output_pixel_4bit = palette_choices_4bit[(i & (1 << j)) >> j]
-            output_pixel_rgb = np.array(
-                palette_choices_rgb[(i & (1 << j)) >> j])
-            # XXX copy
-            options_4bit[i, j] = output_pixel_4bit
-            options_rgb[i, j, :] = np.copy(output_pixel_rgb)
-
-    return options_4bit, options_rgb
-
-
 def dither_lookahead(
         screen: Screen, image_rgb: np.ndarray, dither: Dither, differ:
         ColourDistance, x, y, last_pixel_4bit, lookahead
@@ -439,7 +420,7 @@ def dither_image(
         print(y)
         output_pixel_4bit = np.uint8(0)
         for x in range(screen.X_RES):
-            input_pixel_rgb = np.copy(image_rgb[y, x, :])
+            input_pixel_rgb = image_rgb[y, x, :]
             options_4bit, options_rgb = lookahead_options(
                 screen, lookahead, output_pixel_4bit, x % 4)
 
@@ -448,9 +429,9 @@ def dither_image(
                     screen, image_rgb, dither, differ, x, y, options_4bit,
                     options_rgb,
                     lookahead)
+            quant_error = input_pixel_rgb - output_pixel_rgb
             image_4bit[y, x] = output_pixel_4bit
             image_rgb[y, x, :] = output_pixel_rgb
-            quant_error = input_pixel_rgb - output_pixel_rgb
             dither_apply.apply(dither, screen, x, y, image_rgb, quant_error)
 
     return image_4bit, image_rgb
@@ -478,8 +459,11 @@ def main():
 
     differ = CIE2000Distance()
 
-    output_4bit, output_rgb = dither_image(screen, image, dither, differ,
-                                           lookahead=args.lookahead)
+    start = time.time()
+    output_4bit, output_rgb = dither_apply.dither_image(screen, image, dither,
+                                                        differ,
+                                                        lookahead=args.lookahead)
+    print(time.time() - start)
     screen.pack(output_4bit)
 
     out_image = Image.fromarray(linear_to_srgb(output_rgb).astype(np.uint8))

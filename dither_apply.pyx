@@ -3,7 +3,7 @@
 cimport cython
 import numpy as np
 # from cython.parallel import prange
-# from cython.view cimport array as cvarray
+from cython.view cimport array as cvarray
 # from libc.stdlib cimport malloc, free
 
 
@@ -27,7 +27,7 @@ cdef void apply_one_line(float[:, :, ::1] pattern, int xl, int xr, float[:, ::1]
 
 @cython.boundscheck(False)
 @cython.wraparound(False)
-def apply(dither, screen, int x, int y, float [:, :, ::1]image, float[::1] quant_error):
+cdef apply(dither, screen, int x, int y, float [:, :, ::1]image, float[] quant_error):
     cdef int i, j, k
 
     # XXX only need 2 dimensions now
@@ -89,8 +89,8 @@ def dither_lookahead(
 
     cdef int i, j, k, l
 
-    cdef float[:, :, ::1] lah_image_rgb = np.empty(
-        (2 ** lookahead, lookahead + xr - xl, 3), dtype=np.float32)
+    # XXX malloc
+    cdef float[:, :, ::1] lah_image_rgb = cvarray((2 ** lookahead, lookahead + xr - xl, 3), itemsize=sizeof(float), format="f")
     for i in range(2**lookahead):
         # Copies of input pixels so we can dither in bulk
         for j in range(xxr - x):
@@ -143,3 +143,62 @@ def dither_lookahead(
             best = i
 
     return options_4bit[best, 0], options_rgb[best, 0, :]
+
+import functools
+
+
+@functools.lru_cache(None)
+def lookahead_options(screen, lookahead, last_pixel_4bit, x):
+    options_4bit = np.empty((2 ** lookahead, lookahead), dtype=np.uint8)
+    options_rgb = np.empty((2 ** lookahead, lookahead, 3), dtype=np.float32)
+    for i in range(2 ** lookahead):
+        output_pixel_4bit = last_pixel_4bit
+        for j in range(lookahead):
+            xx = x + j
+            palette_choices_4bit, palette_choices_rgb = \
+                screen.pixel_palette_options(output_pixel_4bit, xx)
+            output_pixel_4bit = palette_choices_4bit[(i & (1 << j)) >> j]
+            output_pixel_rgb = np.array(
+                palette_choices_rgb[(i & (1 << j)) >> j])
+            # XXX copy
+            options_4bit[i, j] = output_pixel_4bit
+            options_rgb[i, j, :] = np.copy(output_pixel_rgb)
+
+    return options_4bit, options_rgb
+
+
+@cython.boundscheck(False)
+@cython.wraparound(False)
+def dither_image(
+        screen, float [:, :, ::1] image_rgb, dither, differ, int lookahead):
+    image_4bit = np.empty(
+        (image_rgb.shape[0], image_rgb.shape[1]), dtype=np.uint8)
+
+    cdef int yres = screen.Y_RES
+    cdef int xres = screen.X_RES
+
+    cdef int y, x, i
+    cdef float[3] quant_error
+    cdef (unsigned char)[:, ::1] options_4bit
+    cdef float[:, :, ::1] options_rgb
+
+    for y in range(yres):
+        # print(y)
+        output_pixel_4bit = np.uint8(0)
+        for x in range(xres):
+            input_pixel_rgb = image_rgb[y, x, :]
+            options_4bit, options_rgb = lookahead_options(
+                screen, lookahead, output_pixel_4bit, x % 4)
+
+            output_pixel_4bit, output_pixel_rgb = \
+                dither_lookahead(
+                    screen, image_rgb, dither, differ, x, y, options_4bit,
+                    options_rgb, lookahead)
+            for i in range(3):
+                quant_error[i] = input_pixel_rgb[i] - output_pixel_rgb[i]
+                image_rgb[y, x, i] = output_pixel_rgb[i]
+            image_4bit[y, x] = output_pixel_4bit
+            apply(dither, screen, x, y, image_rgb, quant_error)
+
+    return image_4bit, np.array(image_rgb)
+
