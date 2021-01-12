@@ -333,33 +333,20 @@ class JarvisDither(Dither):
     ORIGIN = (0, 2)
 
 
-# XXX needed?
-def SRGBResize(im, size, filter) -> np.ndarray:
-    # Convert to numpy array of float
-    arr = np.array(im, dtype=np.float32) / 255.0
-    # Convert sRGB -> linear
-    arr = np.where(arr <= 0.04045, arr / 12.92, ((arr + 0.055) / 1.055) ** 2.4)
-    # Resize using PIL
-    arrOut = np.zeros((size[1], size[0], arr.shape[2]))
-    for i in range(arr.shape[2]):
-        chan = Image.fromarray(arr[:, :, i])
-        chan = chan.resize(size, filter)
-        arrOut[:, :, i] = np.array(chan).clip(0.0, 1.0)
-    # Convert linear -> sRGB
-    arrOut = np.where(arrOut <= 0.0031308, 12.92 * arrOut,
-                      1.055 * arrOut ** (1.0 / 2.4) - 0.055)
-    arrOut = np.rint(np.clip(arrOut, 0.0, 1.0) * 255.0)
-    return arrOut
-
-
 def open_image(screen: Screen, filename: str) -> np.ndarray:
     im = Image.open(filename)
     # TODO: convert to sRGB colour profile explicitly, in case it has some other
     #  profile already.
     if im.mode != "RGB":
         im = im.convert("RGB")
-    return srgb_to_linear(
-        SRGBResize(im, (screen.X_RES, screen.Y_RES), Image.LANCZOS))
+
+    # Convert to linear RGB before rescaling so that colour interpolation is
+    # in linear space
+    linear = srgb_to_linear(np.array(im, dtype=np.float32))
+    rescaled = Image.fromarray(
+        linear.astype(np.uint8)).resize(
+        (screen.X_RES, screen.Y_RES), Image.LANCZOS)
+    return np.array(rescaled, dtype=np.float32)
 
 
 def dither_lookahead(

@@ -4,7 +4,7 @@ cimport cython
 import numpy as np
 # from cython.parallel import prange
 from cython.view cimport array as cvarray
-# from libc.stdlib cimport malloc, free
+from libc.stdlib cimport malloc, free
 
 
 @cython.boundscheck(False)
@@ -15,14 +15,14 @@ cdef float clip(float a, float min_value, float max_value) nogil:
 
 @cython.boundscheck(False)
 @cython.wraparound(False)
-cdef void apply_one_line(float[:, :, ::1] pattern, int xl, int xr, float[:, ::1] image, float[] quant_error) nogil:
+cdef void apply_one_line(float[:, :, ::1] pattern, int xl, int xr, float[] image, int image_shape0, float[] quant_error) nogil:
     cdef int i, j
     cdef float error
 
     for i in range(xr - xl):
         for j in range(3):
             error = pattern[0, i, 0] * quant_error[j]
-            image[xl + i, j] = clip(image[xl + i, j] + error, 0, 255)
+            image[(xl + i) * image_shape0 + j] = clip(image[(xl + i) * image_shape0 + j] + error, 0, 255)
 
 
 @cython.boundscheck(False)
@@ -90,16 +90,20 @@ def dither_lookahead(
     cdef int i, j, k, l
 
     # XXX malloc
-    cdef float[:, :, ::1] lah_image_rgb = cvarray((2 ** lookahead, lookahead + xr - xl, 3), itemsize=sizeof(float), format="f")
+    #cdef float [:, :, ::1] lah_image_rgb = cvarray((2 ** lookahead, lookahead + xr - xl, 3), itemsize=sizeof(float), format="f")
+    cdef int lah_shape0 = 2 ** lookahead
+    cdef int lah_shape1 = lookahead + xr - xl
+    cdef int lah_shape2 = 3
+    cdef float *lah_image_rgb = <float *> malloc(lah_shape0 * lah_shape1 * lah_shape2 * sizeof(float))
     for i in range(2**lookahead):
         # Copies of input pixels so we can dither in bulk
         for j in range(xxr - x):
             for k in range(3):
-                lah_image_rgb[i, j, k] = image_rgb[y, x+j, k]
+                lah_image_rgb[i * lah_shape1 * lah_shape2 + j * lah_shape2 + k] = image_rgb[y, x+j, k]
         # Leave enough space at right of image so we can dither the last of our lookahead pixels.
         for j in range(xxr - x, lookahead + xr - xl):
             for k in range(3):
-                lah_image_rgb[i, j, k] = 0
+                lah_image_rgb[i * lah_shape1 * lah_shape2 + j * lah_shape2 + k] = 0
 
     cdef float[3] quant_error
     # Iterating by row then column is faster for some reason?
@@ -114,8 +118,8 @@ def dither_lookahead(
             # quantization error from having made these choices, in order to compute
             # the total error
             for k in range(3):
-                quant_error[k] = lah_image_rgb[j, i, k] - options_rgb[j, i, k]
-            apply_one_line(pattern, xl, xr, lah_image_rgb[j, :, :], quant_error)
+                quant_error[k] = lah_image_rgb[j * lah_shape1 * lah_shape2 + i * lah_shape2 + k] - options_rgb[j, i, k]
+            apply_one_line(pattern, xl, xr, &lah_image_rgb[j * lah_shape1 * lah_shape2], lah_shape2, quant_error)
 
     cdef int best
     cdef int best_error = 2**31-1
@@ -128,9 +132,9 @@ def dither_lookahead(
         total_error = 0
         for j in range(lookahead):
             # Clip lah_image_rgb into 0..255 range to prepare for computing colour distance
-            r = <long>clip(lah_image_rgb[i, j, 0], 0, 255)
-            g = <long>clip(lah_image_rgb[i, j, 1], 0, 255)
-            b = <long>clip(lah_image_rgb[i, j, 2], 0, 255)
+            r = <long>clip(lah_image_rgb[i * lah_shape1 * lah_shape2 + j * lah_shape2 + 0], 0, 255)
+            g = <long>clip(lah_image_rgb[i * lah_shape1 * lah_shape2 + j * lah_shape2 + 1], 0, 255)
+            b = <long>clip(lah_image_rgb[i * lah_shape1 * lah_shape2 + j * lah_shape2 + 2], 0, 255)
 
             flat = (r << 16) + (g << 8) + b
             bit4 = options_4bit[i, j]
@@ -141,7 +145,7 @@ def dither_lookahead(
         if total_error < best_error:
             best_error = total_error
             best = i
-
+    free(lah_image_rgb)
     return options_4bit[best, 0], options_rgb[best, 0, :]
 
 import functools
