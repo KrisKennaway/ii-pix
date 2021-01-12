@@ -1,6 +1,3 @@
-import bz2
-import pickle
-
 import dither
 import colour.difference
 import numpy as np
@@ -28,11 +25,10 @@ def nearest_colours():
         diffs[:, i] = colour.difference.delta_E_CIE2000(all_lab, palette_lab)
 
     norm = np.max(diffs)
-    print(norm)
     return (diffs / norm * 255).astype(np.uint8)
-    #return diffs
 
 
 n = nearest_colours()
-with bz2.open("nearest2.pickle.bz2", "wb") as f:
-    pickle.dump(n, f)
+out = np.memmap(filename="distances.npy", mode="w+", dtype=np.uint8,
+                shape=n.shape)
+out[:] = n[:]
