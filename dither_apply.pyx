@@ -32,9 +32,11 @@ cdef apply(dither, screen, int x, int y, float [:, :, ::1]image, float[] quant_e
 
     # XXX only need 2 dimensions now
     cdef float[:, :, ::1] pattern = dither.PATTERN
-    cdef int yt, yb, xl, xr
-    yt, yb = y_dither_bounds(pattern, dither.ORIGIN[0], screen.Y_RES, y)
-    xl, xr = x_dither_bounds(pattern, dither.ORIGIN[1], screen.X_RES, x)
+
+    cdef int yt = dither_bounds_yt(dither.ORIGIN[0], y)
+    cdef int yb = dither_bounds_yb(pattern, dither.ORIGIN[0], screen.Y_RES, y)
+    cdef int xl = dither_bounds_xl(dither.ORIGIN[1], x)
+    cdef int xr = dither_bounds_xr(pattern, dither.ORIGIN[1], screen.X_RES, x)
 
     cdef float error
     # We could avoid clipping here, i.e. allow RGB values to extend beyond
@@ -49,28 +51,32 @@ cdef apply(dither, screen, int x, int y, float [:, :, ::1]image, float[] quant_e
 
 @cython.boundscheck(False)
 @cython.wraparound(False)
-cdef x_dither_bounds(float [:, :, ::1] pattern, int x_origin, int x_res, int x):
+cdef int dither_bounds_xl(int x_origin, int x):
     cdef int el = max(x_origin - x, 0)
-    cdef int er = min(pattern.shape[1], x_res - 1 - x)
-
     cdef int xl = x - x_origin + el
-    cdef int xr = x - x_origin + er
-
-    return xl, xr
-
+    return xl
 
 @cython.boundscheck(False)
 @cython.wraparound(False)
-cdef y_dither_bounds(float [:, :, ::1] pattern, int y_origin, int y_res, int y):
-    pshape = pattern.shape
-    et = max(y_origin - y, 0)
-    eb = min(pshape[0], y_res - 1 - y)
+cdef int dither_bounds_xr(float [:, :, ::1] pattern, int x_origin, int x_res, int x):
+    cdef int er = min(pattern.shape[1], x_res - 1 - x)
+    cdef int xr = x - x_origin + er
+    return xr
 
-    yt = y - y_origin + et
-    yb = y - y_origin + eb
+@cython.boundscheck(False)
+@cython.wraparound(False)
+cdef int dither_bounds_yt(int y_origin, int y):
+    cdef int et = max(y_origin - y, 0)
+    cdef int yt = y - y_origin + et
 
+    return yt
 
-    return yt, yb
+@cython.boundscheck(False)
+@cython.wraparound(False)
+cdef int dither_bounds_yb(float [:, :, ::1] pattern, int y_origin, int y_res, int y):
+    cdef int eb = min(pattern.shape[0], y_res - 1 - y)
+    cdef int yb = y - y_origin + eb
+    return yb
 
 @cython.boundscheck(False)
 @cython.wraparound(False)
@@ -81,16 +87,14 @@ def dither_lookahead(
     cdef int x_res = screen.X_RES
     cdef int dither_x_origin = dither.ORIGIN[1]
 
-    cdef int xl, xr
-    xl, xr = x_dither_bounds(pattern, dither_x_origin, x_res, x)
+    cdef int xl = dither_bounds_xl(dither_x_origin, x)
+    cdef int xr = dither_bounds_xr(pattern, dither_x_origin, x_res, x)
 
     # X coord value of larger of dither bounding box or lookahead horizon
     cdef int xxr = min(max(x + lookahead, xr), x_res)
 
     cdef int i, j, k, l
 
-    # XXX malloc
-    #cdef float [:, :, ::1] lah_image_rgb = cvarray((2 ** lookahead, lookahead + xr - xl, 3), itemsize=sizeof(float), format="f")
     cdef int lah_shape0 = 2 ** lookahead
     cdef int lah_shape1 = lookahead + xr - xl
     cdef int lah_shape2 = 3
@@ -108,7 +112,8 @@ def dither_lookahead(
     cdef float[3] quant_error
     # Iterating by row then column is faster for some reason?
     for i in range(xxr - x):
-        xl, xr = x_dither_bounds(pattern, dither_x_origin, x_res, i)
+        xl = dither_bounds_xl(dither_x_origin, i)
+        xr = dither_bounds_xr(pattern, dither_x_origin, x_res, i)
         for j in range(2 ** lookahead):
             # Don't update the input at position x (since we've already chosen
             # fixed outputs), but do propagate quantization errors to positions >x
@@ -164,9 +169,8 @@ def lookahead_options(screen, lookahead, last_pixel_4bit, x):
             output_pixel_4bit = palette_choices_4bit[(i & (1 << j)) >> j]
             output_pixel_rgb = np.array(
                 palette_choices_rgb[(i & (1 << j)) >> j])
-            # XXX copy
             options_4bit[i, j] = output_pixel_4bit
-            options_rgb[i, j, :] = np.copy(output_pixel_rgb)
+            options_rgb[i, j, :] = output_pixel_rgb
 
     return options_4bit, options_rgb
 
