@@ -66,15 +66,16 @@ class DHGR140Screen(Screen):
             (self.Y_RES, self.X_RES * self.X_PIXEL_WIDTH), dtype=np.bool)
         for y in range(self.Y_RES):
             for x in range(self.X_RES):
-                pixel = image_4bit[y, x].item()
+                pixel = image_4bit[y, x]
                 dots = self.palette.DOTS[pixel]
                 bitmap[y, x * self.X_PIXEL_WIDTH:(
                         (x + 1) * self.X_PIXEL_WIDTH)] = dots
         return bitmap
 
     def pixel_palette_options(self, last_pixel_4bit, x: int):
-        return np.array(list(self.palette.RGB.keys())), np.array(list(
-            self.palette.RGB.values()))
+        return (
+            np.array(list(self.palette.RGB.keys()), dtype=np.uint8),
+            np.array(list(self.palette.RGB.values()), dtype=np.uint8))
 
 
 class DHGR560Screen(Screen):
@@ -100,7 +101,6 @@ class DHGR560Screen(Screen):
         other_dots = tuple(other_dots)
         other_pixel_4bit = self.palette.DOTS_TO_4BIT[other_dots]
         return (
-            np.array([last_pixel_4bit, other_pixel_4bit]),
+            np.array([last_pixel_4bit, other_pixel_4bit], dtype=np.uint8),
             np.array([self.palette.RGB[last_pixel_4bit],
-                      self.palette.RGB[other_pixel_4bit]]))
-
+                      self.palette.RGB[other_pixel_4bit]], dtype=np.uint8))

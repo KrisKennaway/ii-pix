@@ -1,6 +1,7 @@
 # cython: infer_types=True
 
 cimport cython
+import functools
 import numpy as np
 # from cython.parallel import prange
 from cython.view cimport array as cvarray
@@ -81,7 +82,7 @@ cdef int dither_bounds_yb(float [:, :, ::1] pattern, int y_origin, int y_res, in
 @cython.boundscheck(False)
 @cython.wraparound(False)
 def dither_lookahead(
-        screen, float[:,:,::1] image_rgb, dither, int x, int y, char[:, ::1] options_4bit,
+        screen, float[:,:,::1] image_rgb, dither, int x, int y, unsigned char[:, ::1] options_4bit,
         float[:, :, ::1] options_rgb, int lookahead):
     cdef float[:, :, ::1] pattern = dither.PATTERN
     cdef int x_res = screen.X_RES
@@ -126,10 +127,11 @@ def dither_lookahead(
                 quant_error[k] = lah_image_rgb[j * lah_shape1 * lah_shape2 + i * lah_shape2 + k] - options_rgb[j, i, k]
             apply_one_line(pattern, xl, xr, &lah_image_rgb[j * lah_shape1 * lah_shape2], lah_shape2, quant_error)
 
+    cdef unsigned char bit4
     cdef int best
     cdef int best_error = 2**31-1
     cdef int total_error
-    cdef long flat, dist, bit4
+    cdef long flat, dist
 
     cdef long r, g, b
     cdef (unsigned char)[:, ::1] distances = screen.palette.distances
@@ -153,8 +155,6 @@ def dither_lookahead(
     free(lah_image_rgb)
     return options_4bit[best, 0], options_rgb[best, 0, :]
 
-import functools
-
 
 @functools.lru_cache(None)
 def lookahead_options(screen, lookahead, last_pixel_4bit, x):
@@ -173,6 +173,27 @@ def lookahead_options(screen, lookahead, last_pixel_4bit, x):
             options_rgb[i, j, :] = output_pixel_rgb
 
     return options_4bit, options_rgb
+
+
+
+@cython.boundscheck(False)
+@cython.wraparound(False)
+def find_nearest_colour(screen, float[::1] pixel_rgb, unsigned char[::1] options_4bit, unsigned char[:, ::1] options_rgb):
+    cdef int best, dist
+    cdef unsigned char bit4
+    cdef int best_dist = 2**8
+    cdef long flat
+
+    cdef (unsigned char)[:, ::1] distances = screen.palette.distances
+    for i in range(options_4bit.shape[0]):
+        flat = (<long>pixel_rgb[0] << 16) + (<long>pixel_rgb[1] << 8) + <long>pixel_rgb[2]
+        bit4 = options_4bit[i]
+        dist = distances[flat, bit4]
+        if dist < best_dist:
+            best_dist = dist
+            best = i
+
+    return options_4bit[best], options_rgb[best, :]
 
 
 @cython.boundscheck(False)
@@ -197,13 +218,17 @@ def dither_image(
         output_pixel_4bit = 0
         for x in range(xres):
             input_pixel_rgb = image_rgb[y, x, :]
-            options_4bit, options_rgb = lookahead_options(
-                screen, lookahead, output_pixel_4bit, x % 4)
-
-            output_pixel_4bit, output_pixel_rgb = \
-                dither_lookahead(
-                    screen, image_rgb, dither, x, y, options_4bit,
-                    options_rgb, lookahead)
+            if lookahead:
+                palette_choices_4bit, palette_choices_rgb = lookahead_options(
+                    screen, lookahead, output_pixel_4bit, x % 4)
+                output_pixel_4bit, output_pixel_rgb = \
+                    dither_lookahead(
+                        screen, image_rgb, dither, x, y, palette_choices_4bit,
+                        palette_choices_rgb, lookahead)
+            else:
+                palette_choices_4bit, palette_choices_rgb = screen.pixel_palette_options(output_pixel_4bit, x)
+                output_pixel_4bit, output_pixel_rgb = \
+                    find_nearest_colour(screen, input_pixel_rgb, palette_choices_4bit, palette_choices_rgb)
             for i in range(3):
                 quant_error[i] = input_pixel_rgb[i] - output_pixel_rgb[i]
                 image_rgb[y, x, i] = output_pixel_rgb[i]

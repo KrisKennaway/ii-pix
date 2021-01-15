@@ -13,7 +13,7 @@ import screen as screen_py
 
 
 # TODO:
-# - support 140px mode again
+# - include fringing in 140px output
 # - compare to bmp2dhr and a2bestpix
 # - support LR/DLR
 # - support HGR
@@ -38,11 +38,20 @@ def main():
     parser.add_argument(
         '--show_output', action=argparse.BooleanOptionalAction, default=True,
         help="Whether to show the output image after conversion.")
+    parser.add_argument(
+        '--resolution', type=int, choices=(560, 140), default=560,
+        help=("Double hi-res resolution to target.  140 treats pixels as "
+              "groups of 4 and ignores NTSC fringing.")
+    )
     args = parser.parse_args()
 
     palette = palette_py.Palette()
-    # screen = DHGR140Screen()
-    screen = screen_py.DHGR560Screen(palette)
+    if args.resolution == 560:
+        screen = screen_py.DHGR560Screen(palette)
+        lookahead = args.lookahead
+    else:
+        screen = screen_py.DHGR140Screen(palette)
+        lookahead = 0
 
     image = image_py.open(screen.X_RES, screen.Y_RES, args.input)
     if args.show_input:
@@ -52,7 +61,7 @@ def main():
 
     start = time.time()
     output_4bit, output_rgb = dither_pyx.dither_image(
-        screen, image, dither, lookahead=args.lookahead)
+        screen, image, dither, lookahead)
     print(time.time() - start)
     screen.pack(output_4bit)
 
