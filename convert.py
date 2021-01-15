@@ -13,10 +13,12 @@ import screen as screen_py
 
 
 # TODO:
+# - support alternate palettes properly
 # - include fringing in 140px output
 # - compare to bmp2dhr and a2bestpix
 # - support LR/DLR
 # - support HGR
+# - README
 
 
 def main():
@@ -40,8 +42,12 @@ def main():
         help="Whether to show the output image after conversion.")
     parser.add_argument(
         '--resolution', type=int, choices=(560, 140), default=560,
-        help=("Double hi-res resolution to target.  140 treats pixels as "
-              "groups of 4 and ignores NTSC fringing.")
+        help=("Double hi-res resolution to target.  140 treats pixels in "
+              "groups of 4, with 16 colours that can be chosen independently, "
+              "and ignores NTSC fringing.  560 treats each pixel individually, "
+              "with choice of 2 colours (depending on NTSC colour phase), "
+              "and looking ahead over next --lookahead pixels to optimize the "
+              "colour sequence.")
     )
     args = parser.parse_args()
 
