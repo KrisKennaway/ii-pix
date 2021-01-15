@@ -19,15 +19,17 @@ import screen as screen_py
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("input", type=str, help="Input file to process")
-    parser.add_argument("output", type=str, help="Output file for ")
+    parser.add_argument("input", type=str, help="Input image file to process.")
+    parser.add_argument("output", type=str, help="Output file for converted "
+                                                 "Apple II image.")
     parser.add_argument(
         "--lookahead", type=int, default=6,
         help=("How many pixels to look ahead to compensate for NTSC colour "
               "artifacts."))
-    parser.add_argument('--dither', type=str,
-                        choices=list(dither_pattern.PATTERNS.keys()),
-                        default=dither_pattern.DEFAULT_PATTERN)
+    parser.add_argument(
+        '--dither', type=str, choices=list(dither_pattern.PATTERNS.keys()),
+        default=dither_pattern.DEFAULT_PATTERN,
+        help="Error distribution pattern to apply when dithering.")
     args = parser.parse_args()
 
     palette = palette_py.Palette()
