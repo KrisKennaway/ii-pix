@@ -62,7 +62,6 @@ def main():
     out_image.save(outfile, "PNG")
     if args.show_output:
         out_image.show()
-    # bitmap = Image.fromarray(screen.bitmap.astype('uint8') * 255)
 
     with open(args.output, "wb") as f:
         f.write(bytes(screen.main))
