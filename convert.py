@@ -25,6 +25,9 @@ def main():
         "--lookahead", type=int, default=4,
         help=("How many pixels to look ahead to compensate for NTSC colour "
               "artifacts."))
+    parser.add_argument('--dither', type=str,
+                        choices=list(dither_pattern.PATTERNS.keys()),
+                        default=dither_pattern.DEFAULT_PATTERN)
     args = parser.parse_args()
 
     palette = palette_py.Palette()
@@ -34,9 +37,7 @@ def main():
     image = image_py.open(screen.X_RES, screen.Y_RES, args.input)
     # image_rgb.show()
 
-    # dither = dither_pattern.FloydSteinbergDither()
-    # dither = dither_pattern.BuckelsDither()
-    dither = dither_pattern.JarvisDither()
+    dither = dither_pattern.PATTERNS[args.dither]()
 
     start = time.time()
     output_4bit, output_rgb = dither_pyx.dither_image(
