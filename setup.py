@@ -5,5 +5,5 @@ import Cython.Compiler.Options
 Cython.Compiler.Options.annotate = True
 
 setup(
-    ext_modules=cythonize(["dither_apply.pyx"], annotate=True)
+    ext_modules=cythonize(["dither.pyx"], annotate=True)
 )

@@ -5,7 +5,7 @@ import time
 from PIL import Image
 import numpy as np
 
-import dither_apply
+import dither as dither_pyx
 import dither_pattern
 import image as image_py
 import palette as palette_py
@@ -39,7 +39,7 @@ def main():
     dither = dither_pattern.JarvisDither()
 
     start = time.time()
-    output_4bit, output_rgb = dither_apply.dither_image(
+    output_4bit, output_rgb = dither_pyx.dither_image(
         screen, image, dither, lookahead=args.lookahead)
     print(time.time() - start)
     screen.pack(output_4bit)
