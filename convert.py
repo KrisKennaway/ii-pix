@@ -22,7 +22,7 @@ def main():
     parser.add_argument("input", type=str, help="Input file to process")
     parser.add_argument("output", type=str, help="Output file for ")
     parser.add_argument(
-        "--lookahead", type=int, default=4,
+        "--lookahead", type=int, default=6,
         help=("How many pixels to look ahead to compensate for NTSC colour "
               "artifacts."))
     parser.add_argument('--dither', type=str,
