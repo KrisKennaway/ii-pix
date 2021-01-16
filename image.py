@@ -21,17 +21,22 @@ def linear_to_srgb(im: np.ndarray) -> np.ndarray:
     return (np.clip(srgb, 0.0, 1.0) * 255).astype(np.float32)
 
 
-def open(x_res:int, y_res:int, filename: str) -> np.ndarray:
+def open(filename: str) -> np.ndarray:
     im = Image.open(filename)
     # TODO: convert to sRGB colour profile explicitly, in case it has some other
     #  profile already.
     if im.mode != "RGB":
         im = im.convert("RGB")
+    return im
 
+
+def resize(image: Image, x_res, y_res, srgb_output: bool = False) -> Image:
     # Convert to linear RGB before rescaling so that colour interpolation is
     # in linear space
-    linear = srgb_to_linear(np.asarray(im)).astype(np.uint8)
-    rescaled = Image.fromarray(linear).resize((x_res, y_res), Image.LANCZOS)
-    # TODO: better performance with malloc'ed array?
-    return np.array(rescaled).astype(np.float32)
-
+    linear = srgb_to_linear(np.asarray(image)).astype(np.uint8)
+    res = Image.fromarray(linear).resize((x_res, y_res), Image.LANCZOS)
+    if srgb_output:
+        return Image.fromarray(
+            linear_to_srgb(np.array(res, dtype=np.float32)).astype(np.uint8))
+    else:
+        return res

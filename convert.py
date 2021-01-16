@@ -59,15 +59,18 @@ def main():
         screen = screen_py.DHGR140Screen(palette)
         lookahead = 0
 
-    image = image_py.open(screen.X_RES, screen.Y_RES, args.input)
+    image = image_py.open(args.input)
+    # TODO: better performance with malloc'ed array?
+    resized = np.array(
+        image_py.resize(image, screen.X_RES, screen.Y_RES)).astype(np.float32)
     if args.show_input:
-        Image.fromarray(image.astype(np.uint8)).show()
+        Image.fromarray(resized.astype(np.uint8)).show()
 
     dither = dither_pattern.PATTERNS[args.dither]()
 
     start = time.time()
     output_4bit, output_rgb = dither_pyx.dither_image(
-        screen, image, dither, lookahead)
+        screen, resized, dither, lookahead)
     print(time.time() - start)
     screen.pack(output_4bit)
 
@@ -76,7 +79,7 @@ def main():
     outfile = os.path.join(os.path.splitext(args.output)[0] + ".png")
     out_image.save(outfile, "PNG")
     if args.show_output:
-        out_image.show()
+        image_py.resize(out_image, 560, 384, srgb_output=True).show()
 
     with open(args.output, "wb") as f:
         f.write(bytes(screen.main))
