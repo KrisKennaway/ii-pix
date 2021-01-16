@@ -50,6 +50,18 @@ class Screen:
             self.aux[addr:addr + 40] = aux_col[y, :]
             self.main[addr:addr + 40] = main_col[y, :]
 
+        return bitmap
+
+    def bitmap_to_image_rgb(self, bitmap: np.ndarray) -> np.ndarray:
+        image_rgb = np.empty((192, 560, 3), dtype=np.uint8)
+        for y in range(self.Y_RES):
+            pixel = [False, False, False, False]
+            for x in range(560):
+                pixel[x % 4] = bitmap[y, x]
+                dots = self.palette.DOTS_TO_4BIT[tuple(pixel)]
+                image_rgb[y, x, :] = self.palette.RGB[dots]
+        return image_rgb
+
     def pixel_palette_options(self, last_pixel_4bit, x: int):
         raise NotImplementedError
 

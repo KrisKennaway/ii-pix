@@ -14,7 +14,6 @@ import screen as screen_py
 
 # TODO:
 # - support alternate palettes properly
-# - include fringing in 140px output
 # - compare to bmp2dhr and a2bestpix
 # - support LR/DLR
 # - support HGR
@@ -72,14 +71,25 @@ def main():
     output_4bit, output_rgb = dither_pyx.dither_image(
         screen, resized, dither, lookahead)
     print(time.time() - start)
-    screen.pack(output_4bit)
 
+    if args.resolution == 140:
+        # Show un-fringed 140px output image
+        out_image = Image.fromarray(image_py.linear_to_srgb(output_rgb).astype(
+            np.uint8))
+        if args.show_output:
+            image_py.resize(out_image, 560, 384, srgb_output=True).show()
+
+    bitmap = screen.pack(output_4bit)
+    output_rgb = screen.bitmap_to_image_rgb(bitmap)
+
+    # Show output image
     out_image = Image.fromarray(image_py.linear_to_srgb(output_rgb).astype(
         np.uint8))
-    outfile = os.path.join(os.path.splitext(args.output)[0] + ".png")
-    out_image.save(outfile, "PNG")
     if args.show_output:
         image_py.resize(out_image, 560, 384, srgb_output=True).show()
+
+    outfile = os.path.join(os.path.splitext(args.output)[0] + ".png")
+    out_image.save(outfile, "PNG")
 
     with open(args.output, "wb") as f:
         f.write(bytes(screen.main))
