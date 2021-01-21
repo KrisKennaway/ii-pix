@@ -66,6 +66,7 @@ def main():
         Image.fromarray(resized.astype(np.uint8)).show()
 
     dither = dither_pattern.PATTERNS[args.dither]()
+    print(dither.PATTERN)
 
     start = time.time()
     output_4bit, output_rgb = dither_pyx.dither_image(
@@ -86,9 +87,10 @@ def main():
     out_image = Image.fromarray(image_py.linear_to_srgb(output_rgb).astype(
         np.uint8))
     if args.show_output:
+        # out_image.show()
         image_py.resize(out_image, 560, 384, srgb_output=True).show()
 
-    outfile = os.path.join(os.path.splitext(args.output)[0] + ".png")
+    outfile = os.path.join(os.path.splitext(args.output)[0] + "_preview.png")
     out_image.save(outfile, "PNG")
 
     with open(args.output, "wb") as f:

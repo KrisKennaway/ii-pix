@@ -14,13 +14,13 @@ class Palette:
                                    dtype=np.uint8, shape=(16777216, 16))
 
     # Default bmp2dhr palette
-    RGB = {
+    sRGB = {
         0: np.array((0, 0, 0)),  # Black
         8: np.array((148, 12, 125)),  # Magenta
         4: np.array((99, 77, 0)),  # Brown
         12: np.array((249, 86, 29)),  # Orange
         2: np.array((51, 111, 0)),  # Dark green
-        10: np.array((126, 126, 125)),  # Grey2
+        10: np.array((126, 126, 126)),  # Grey2
         6: np.array((67, 200, 0)),  # Green
         14: np.array((221, 206, 23)),  # Yellow
         1: np.array((32, 54, 212)),  # Dark blue

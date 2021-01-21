@@ -14,19 +14,20 @@ cdef float clip(float a, float min_value, float max_value) nogil:
     return min(max(a, min_value), max_value)
 
 
-@cython.boundscheck(False)
+#@cython.boundscheck(False)
 @cython.wraparound(False)
-cdef void apply_one_line(float[:, :, ::1] pattern, int xl, int xr, float[] image, int image_shape0, float[] quant_error) nogil:
+cdef void apply_one_line(float[:, :, ::1] pattern, int xl, int xr, int x, int x_origin, float[] image, int image_shape1, float[] quant_error):
     cdef int i, j
     cdef float error
 
-    for i in range(xr - xl):
+    for i in range(xl, xr):
         for j in range(3):
-            error = pattern[0, i, 0] * quant_error[j]
-            image[(xl + i) * image_shape0 + j] = clip(image[(xl + i) * image_shape0 + j] + error, 0, 255)
+            # print("aol: x=%d, applying pattern pos %d to pos %d" % (x, i-x+1, i))
+            error = pattern[0, i - x + x_origin, 0] * quant_error[j]
+            image[i * image_shape1 + j] = clip(image[i * image_shape1 + j] + error, 0, 255)
 
 
-@cython.boundscheck(False)
+#@cython.boundscheck(False)
 @cython.wraparound(False)
 cdef apply(dither, screen, int x, int y, float [:, :, ::1]image, float[] quant_error):
     cdef int i, j, k
@@ -38,16 +39,24 @@ cdef apply(dither, screen, int x, int y, float [:, :, ::1]image, float[] quant_e
     cdef int yb = dither_bounds_yb(pattern, dither.ORIGIN[0], screen.Y_RES, y)
     cdef int xl = dither_bounds_xl(dither.ORIGIN[1], x)
     cdef int xr = dither_bounds_xr(pattern, dither.ORIGIN[1], screen.X_RES, x)
-
+    # print("X %d %d %d" % (xl, x, xr))
+    # print("Y %d %d %d" % (yt, y, yb))
     cdef float error
     # We could avoid clipping here, i.e. allow RGB values to extend beyond
     # 0..255 to capture a larger range of residual error.  This is faster
     # but seems to reduce image quality.
-    for i in range(yb - yt):
-        for j in range(xr - xl):
+    for i in range(yt, yb):
+        for j in range(xl, xr):
+            # XXX partially compute error here
             for k in range(3):
-                error = pattern[i, j, 0] * quant_error[k]
-                image[yt+i, xl+j, k] = clip(image[yt+i, xl+j, k] + error, 0, 255)
+                # XXX unroll/malloc pattern
+                error = pattern[i - y, j - x + dither.ORIGIN[1], 0] * quant_error[k]
+                #print("Pattern %f " % pattern[i - y, j - x + dither.ORIGIN[1], 0])
+                #print("Apply error %f" % quant_error[k])
+                #print(error)
+                #print("(%d, %d) -> (%d, %d, %d): %f --> %f (%f, %f)" % (y, x, i, j, k, image[i,j,k], error, pattern[i - y, j - x + dither.ORIGIN[1], 0], quant_error[k]))
+                image[i, j, k] = clip(image[i, j, k] + error, 0, 255)
+                # print("%d %d %d" % (i,j,k))
 
 
 @cython.boundscheck(False)
@@ -55,13 +64,15 @@ cdef apply(dither, screen, int x, int y, float [:, :, ::1]image, float[] quant_e
 cdef int dither_bounds_xl(int x_origin, int x):
     cdef int el = max(x_origin - x, 0)
     cdef int xl = x - x_origin + el
+    # print("xl: origin=%d x=%d el=%d, xl=%d" % (x_origin, x, el, xl))
     return xl
 
 @cython.boundscheck(False)
 @cython.wraparound(False)
 cdef int dither_bounds_xr(float [:, :, ::1] pattern, int x_origin, int x_res, int x):
-    cdef int er = min(pattern.shape[1], x_res - 1 - x)
+    cdef int er = min(pattern.shape[1], x_res - x)
     cdef int xr = x - x_origin + er
+    # print("xr: shape=%d origin=%d res=%d x=%d er=%d, xr=%d" % (pattern.shape[1], x_origin, x_res, x, er, xr))
     return xr
 
 @cython.boundscheck(False)
@@ -75,11 +86,11 @@ cdef int dither_bounds_yt(int y_origin, int y):
 @cython.boundscheck(False)
 @cython.wraparound(False)
 cdef int dither_bounds_yb(float [:, :, ::1] pattern, int y_origin, int y_res, int y):
-    cdef int eb = min(pattern.shape[0], y_res - 1 - y)
+    cdef int eb = min(pattern.shape[0], y_res - y)
     cdef int yb = y - y_origin + eb
     return yb
 
-@cython.boundscheck(False)
+# @cython.boundscheck(False)
 @cython.wraparound(False)
 def dither_lookahead(
         screen, float[:,:,::1] image_rgb, dither, int x, int y, unsigned char[:, ::1] options_4bit,
@@ -92,8 +103,8 @@ def dither_lookahead(
     cdef int xr = dither_bounds_xr(pattern, dither_x_origin, x_res, x)
 
     # X coord value of larger of dither bounding box or lookahead horizon
-    cdef int xxr = min(max(x + lookahead, xr), x_res)
-
+    cdef int xxr = min(max(x + lookahead, xr), x_res)  # XXX
+    # print("xxr=%d, x=%d, xr=%d, x_res=%d" % (xxr, x, xr, x_res))
     cdef int i, j, k, l
 
     cdef int lah_shape0 = 2 ** lookahead
@@ -106,7 +117,7 @@ def dither_lookahead(
             for k in range(3):
                 lah_image_rgb[i * lah_shape1 * lah_shape2 + j * lah_shape2 + k] = image_rgb[y, x+j, k]
         # Leave enough space at right of image so we can dither the last of our lookahead pixels.
-        for j in range(xxr - x, lookahead + xr - xl):
+        for j in range(xxr - x, lookahead + xr - xl): # XXX
             for k in range(3):
                 lah_image_rgb[i * lah_shape1 * lah_shape2 + j * lah_shape2 + k] = 0
 
@@ -114,7 +125,8 @@ def dither_lookahead(
     # Iterating by row then column is faster for some reason?
     for i in range(xxr - x):
         xl = dither_bounds_xl(dither_x_origin, i)
-        xr = dither_bounds_xr(pattern, dither_x_origin, x_res, i)
+        xr = dither_bounds_xr(pattern, dither_x_origin, x_res - x, i)# XXX right-hand bounds?
+        # print("aol: %d %d (%d) %d" % (xl, i, i+x, xr))
         for j in range(2 ** lookahead):
             # Don't update the input at position x (since we've already chosen
             # fixed outputs), but do propagate quantization errors to positions >x
@@ -124,8 +136,10 @@ def dither_lookahead(
             # quantization error from having made these choices, in order to compute
             # the total error
             for k in range(3):
+                #print("j=%d, i=%d, k=%d, lah=%f, option=%f" % (j, i, k, lah_image_rgb[j * lah_shape1 * lah_shape2 + i * lah_shape2 + k] , options_rgb[j,i,k]))
                 quant_error[k] = lah_image_rgb[j * lah_shape1 * lah_shape2 + i * lah_shape2 + k] - options_rgb[j, i, k]
-            apply_one_line(pattern, xl, xr, &lah_image_rgb[j * lah_shape1 * lah_shape2], lah_shape2, quant_error)
+                #print("qe=%f" % (quant_error[k]))
+            apply_one_line(pattern, xl, xr, i, dither_x_origin, &lah_image_rgb[j * lah_shape1 * lah_shape2], lah_shape2, quant_error)
 
     cdef unsigned char bit4
     cdef int best
@@ -144,14 +158,17 @@ def dither_lookahead(
             b = <long>clip(lah_image_rgb[i * lah_shape1 * lah_shape2 + j * lah_shape2 + 2], 0, 255)
 
             flat = (r << 16) + (g << 8) + b
+            # print("%f, r=%d, g=%d, b=%d, flat=%d" % (lah_image_rgb[i * lah_shape1 * lah_shape2 + j * lah_shape2 + 2], r,g,b,flat))
             bit4 = options_4bit[i, j]
             dist = distances[flat, bit4]
-            total_error += dist ** 2
-            if total_error >= best_error:
-                break
+            total_error += <long>dist ** 2  # * (j+1)
+            #if total_error >= best_error:
+            #    break
+        #print("total_error %d %d" % (i, total_error))
         if total_error < best_error:
             best_error = total_error
             best = i
+    #print("best=%d" % best)
     free(lah_image_rgb)
     return options_4bit[best, 0], options_rgb[best, 0, :]
 
@@ -214,10 +231,12 @@ def dither_image(
     cdef float[::1] input_pixel_rgb
 
     for y in range(yres):
-        # print(y)
+        #print(y)
         output_pixel_4bit = 0
         for x in range(xres):
             input_pixel_rgb = image_rgb[y, x, :]
+            #for i in range(3):
+                #print("Input %f" % input_pixel_rgb[i])
             if lookahead:
                 palette_choices_4bit, palette_choices_rgb = lookahead_options(
                     screen, lookahead, output_pixel_4bit, x % 4)
@@ -231,8 +250,14 @@ def dither_image(
                     find_nearest_colour(screen, input_pixel_rgb, palette_choices_4bit, palette_choices_rgb)
             for i in range(3):
                 quant_error[i] = input_pixel_rgb[i] - output_pixel_rgb[i]
-                image_rgb[y, x, i] = output_pixel_rgb[i]
+                #print("Input2 %f" % input_pixel_rgb[i])
+                #print("Output %f" % output_pixel_rgb[i])
+                #print("QE %f" % quant_error[i])
+                # XXX dither channels independently
             image_4bit[y, x] = output_pixel_4bit
             apply(dither, screen, x, y, image_rgb, quant_error)
+            for i in range(3):
+                # print(output_pixel_rgb[i])
+                image_rgb[y, x, i] = output_pixel_rgb[i]
 
     return image_4bit, np.array(image_rgb)
