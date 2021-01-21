@@ -28,26 +28,26 @@ cdef void apply_one_line(float[:, :, ::1] pattern, int xl, int xr, int x, int x_
 
 @cython.boundscheck(False)
 @cython.wraparound(False)
-cdef apply(dither, screen, int x, int y, float [:, :, ::1]image, float[] quant_error):
+cdef apply(dither, screen, int x, int y, int x_origin, int y_origin, float [:, :, ::1]image, float[] quant_error):
     cdef int i, j, k
 
     # XXX only need 2 dimensions now
     cdef float[:, :, ::1] pattern = dither.PATTERN
 
-    cdef int yt = dither_bounds_yt(dither.ORIGIN[0], y)
-    cdef int yb = dither_bounds_yb(pattern, dither.ORIGIN[0], screen.Y_RES, y)
-    cdef int xl = dither_bounds_xl(dither.ORIGIN[1], x)
-    cdef int xr = dither_bounds_xr(pattern, dither.ORIGIN[1], screen.X_RES, x)
-    cdef float error
+    cdef int yt = dither_bounds_yt(y_origin, y)
+    cdef int yb = dither_bounds_yb(pattern, y_origin, screen.Y_RES, y)
+    cdef int xl = dither_bounds_xl(x_origin, x)
+    cdef int xr = dither_bounds_xr(pattern, x_origin, screen.X_RES, x)
+    cdef float error, pattern_element
     # We could avoid clipping here, i.e. allow RGB values to extend beyond
     # 0..255 to capture a larger range of residual error.  This is faster
     # but seems to reduce image quality.
     for i in range(yt, yb):
         for j in range(xl, xr):
-            # XXX partially compute error here
+            pattern_element = pattern[i - y, j - x + x_origin, 0]
             for k in range(3):
                 # XXX unroll/malloc pattern
-                error = pattern[i - y, j - x + dither.ORIGIN[1], 0] * quant_error[k]
+                error = pattern_element * quant_error[k]
                 image[i, j, k] = clip(image[i, j, k] + error, 0, 255)
 
 
@@ -146,9 +146,9 @@ def dither_lookahead(
             flat = (r << 16) + (g << 8) + b
             bit4 = options_4bit[i, j]
             dist = distances[flat, bit4]
-            total_error += <long>dist ** 2  # * (j+1)
-            #if total_error >= best_error:
-            #    break
+            total_error += dist ** 2
+            if total_error >= best_error:
+                break
         if total_error < best_error:
             best_error = total_error
             best = i
@@ -213,6 +213,9 @@ def dither_image(
     cdef unsigned char output_pixel_4bit
     cdef float[::1] input_pixel_rgb
 
+    cdef int y_origin = dither.ORIGIN[0]
+    cdef int x_origin = dither.ORIGIN[1]
+
     for y in range(yres):
         output_pixel_4bit = 0
         for x in range(xres):
@@ -231,7 +234,7 @@ def dither_image(
             for i in range(3):
                 quant_error[i] = input_pixel_rgb[i] - output_pixel_rgb[i]
             image_4bit[y, x] = output_pixel_4bit
-            apply(dither, screen, x, y, image_rgb, quant_error)
+            apply(dither, screen, x, y, x_origin, y_origin, image_rgb, quant_error)
             for i in range(3):
                 image_rgb[y, x, i] = output_pixel_rgb[i]
 

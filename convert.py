@@ -66,7 +66,6 @@ def main():
         Image.fromarray(resized.astype(np.uint8)).show()
 
     dither = dither_pattern.PATTERNS[args.dither]()
-    print(dither.PATTERN)
 
     start = time.time()
     output_4bit, output_rgb = dither_pyx.dither_image(
