@@ -7,6 +7,7 @@ import numpy as np
 from cython.view cimport array as cvarray
 from libc.stdlib cimport malloc, free
 
+
 # TODO: use a cdef class
 cdef struct Dither:
     float* pattern   # Flattened dither pattern
@@ -22,75 +23,55 @@ cdef struct Image:
     int shape2
 
 
-@cython.boundscheck(False)
-@cython.wraparound(False)
 cdef float clip(float a, float min_value, float max_value) nogil:
     return min(max(a, min_value), max_value)
 
 
-@cython.boundscheck(False)
-@cython.wraparound(False)
-cdef void apply_one_line(Dither* dither, int xl, int xr, int x, float[] image, int image_shape1, float[] quant_error):
-    cdef int i, j
-    cdef float error
 
-    for i in range(xl, xr):
-        for j in range(3):
-            error = dither.pattern[i - x + dither.x_origin] * quant_error[j]
-            image[i * image_shape1 + j] = clip(image[i * image_shape1 + j] + error, 0, 255)
-
-
-@cython.boundscheck(False)
-@cython.wraparound(False)
-cdef apply(Dither* dither, screen, int x, int y, Image* image, float[] quant_error):
-    cdef int i, j, k
-
-    cdef int yt = dither_bounds_yt(dither, y)
-    cdef int yb = dither_bounds_yb(dither, screen.Y_RES, y)
-    cdef int xl = dither_bounds_xl(dither, x)
-    cdef int xr = dither_bounds_xr(dither, screen.X_RES, x)
-
-    cdef float error
-    # We could avoid clipping here, i.e. allow RGB values to extend beyond
-    # 0..255 to capture a larger range of residual error.  This is faster
-    # but seems to reduce image quality.
-    # TODO: is this still true?
-    for i in range(yt, yb):
-        for j in range(xl, xr):
-            for k in range(3):
-                error = dither.pattern[(i - y) * dither.x_shape + j - x + dither.x_origin] * quant_error[k]
-                image.flat[i * image.shape1 * image.shape2 + j * image.shape2 + k] = clip(
-                    image.flat[i * image.shape1 * image.shape2 + j * image.shape2 + k] + error, 0, 255)
-
-
-@cython.boundscheck(False)
-@cython.wraparound(False)
 cdef int dither_bounds_xl(Dither *dither, int x):
     cdef int el = max(dither.x_origin - x, 0)
     cdef int xl = x - dither.x_origin + el
     return xl
 
-@cython.boundscheck(False)
-@cython.wraparound(False)
+
 cdef int dither_bounds_xr(Dither *dither, int x_res, int x):
     cdef int er = min(dither.x_shape, x_res - x)
     cdef int xr = x - dither.x_origin + er
     return xr
 
-@cython.boundscheck(False)
-@cython.wraparound(False)
+
 cdef int dither_bounds_yt(Dither *dither, int y):
     cdef int et = max(dither.y_origin - y, 0)
     cdef int yt = y - dither.y_origin + et
 
     return yt
 
-@cython.boundscheck(False)
-@cython.wraparound(False)
 cdef int dither_bounds_yb(Dither *dither, int y_res, int y):
     cdef int eb = min(dither.y_shape, y_res - y)
     cdef int yb = y - dither.y_origin + eb
     return yb
+
+
+@cython.boundscheck(False)
+@cython.wraparound(False)
+@functools.lru_cache(None)
+def lookahead_options(screen, lookahead, last_pixel_4bit, x):
+    options_4bit = np.empty((2 ** lookahead, lookahead), dtype=np.uint8)
+    options_rgb = np.empty((2 ** lookahead, lookahead, 3), dtype=np.float32)
+    for i in range(2 ** lookahead):
+        output_pixel_4bit = last_pixel_4bit
+        for j in range(lookahead):
+            xx = x + j
+            palette_choices_4bit, palette_choices_rgb = \
+                screen.pixel_palette_options(output_pixel_4bit, xx)
+            output_pixel_4bit = palette_choices_4bit[(i & (1 << j)) >> j]
+            output_pixel_rgb = np.array(
+                palette_choices_rgb[(i & (1 << j)) >> j])
+            options_4bit[i, j] = output_pixel_4bit
+            options_rgb[i, j, :] = output_pixel_rgb
+
+    return options_4bit, options_rgb
+
 
 @cython.boundscheck(False)
 @cython.wraparound(False)
@@ -167,24 +148,35 @@ cdef dither_lookahead(Dither* dither,
     return options_4bit[best, 0], options_rgb[best, 0, :]
 
 
-@functools.lru_cache(None)
-def lookahead_options(screen, lookahead, last_pixel_4bit, x):
-    options_4bit = np.empty((2 ** lookahead, lookahead), dtype=np.uint8)
-    options_rgb = np.empty((2 ** lookahead, lookahead, 3), dtype=np.float32)
-    for i in range(2 ** lookahead):
-        output_pixel_4bit = last_pixel_4bit
-        for j in range(lookahead):
-            xx = x + j
-            palette_choices_4bit, palette_choices_rgb = \
-                screen.pixel_palette_options(output_pixel_4bit, xx)
-            output_pixel_4bit = palette_choices_4bit[(i & (1 << j)) >> j]
-            output_pixel_rgb = np.array(
-                palette_choices_rgb[(i & (1 << j)) >> j])
-            options_4bit[i, j] = output_pixel_4bit
-            options_rgb[i, j, :] = output_pixel_rgb
+cdef void apply_one_line(Dither* dither, int xl, int xr, int x, float[] image, int image_shape1, float[] quant_error):
+    cdef int i, j
+    cdef float error
 
-    return options_4bit, options_rgb
+    for i in range(xl, xr):
+        for j in range(3):
+            error = dither.pattern[i - x + dither.x_origin] * quant_error[j]
+            image[i * image_shape1 + j] = clip(image[i * image_shape1 + j] + error, 0, 255)
 
+
+cdef apply(Dither* dither, screen, int x, int y, Image* image, float[] quant_error):
+    cdef int i, j, k
+
+    cdef int yt = dither_bounds_yt(dither, y)
+    cdef int yb = dither_bounds_yb(dither, screen.Y_RES, y)
+    cdef int xl = dither_bounds_xl(dither, x)
+    cdef int xr = dither_bounds_xr(dither, screen.X_RES, x)
+
+    cdef float error
+    # We could avoid clipping here, i.e. allow RGB values to extend beyond
+    # 0..255 to capture a larger range of residual error.  This is faster
+    # but seems to reduce image quality.
+    # TODO: is this still true?
+    for i in range(yt, yb):
+        for j in range(xl, xr):
+            for k in range(3):
+                error = dither.pattern[(i - y) * dither.x_shape + j - x + dither.x_origin] * quant_error[k]
+                image.flat[i * image.shape1 * image.shape2 + j * image.shape2 + k] = clip(
+                    image.flat[i * image.shape1 * image.shape2 + j * image.shape2 + k] + error, 0, 255)
 
 
 @cython.boundscheck(False)
@@ -223,6 +215,19 @@ def dither_image(screen, float[:, :, ::1] image_rgb, dither, int lookahead):
     cdef unsigned char output_pixel_4bit
     cdef float[3] input_pixel_rgb
 
+    # Flatten python image array for more efficient access
+    cdef Image cimage_rgb
+    cimage_rgb.flat = <float *> malloc(image_rgb.shape[0] * image_rgb.shape[1] * image_rgb.shape[2] * sizeof(float))
+    cimage_rgb.shape0 = image_rgb.shape[0]
+    cimage_rgb.shape1 = image_rgb.shape[1]
+    cimage_rgb.shape2 = image_rgb.shape[2]
+    for y in range(cimage_rgb.shape0):
+        for x in range(cimage_rgb.shape1):
+            for i in range(cimage_rgb.shape2):
+                cimage_rgb.flat[y * cimage_rgb.shape1 * cimage_rgb.shape2 + x * cimage_rgb.shape2 + i] = (
+                    image_rgb[y, x, i])
+
+    # Flatten python dither pattern array for more efficient access
     cdef Dither cdither
     cdither.y_shape = dither.PATTERN.shape[0]
     cdither.x_shape = dither.PATTERN.shape[1]
@@ -234,27 +239,18 @@ def dither_image(screen, float[:, :, ::1] image_rgb, dither, int lookahead):
         for j in range(cdither.x_shape):
             cdither.pattern[i * cdither.x_shape + j] = dither.PATTERN[i, j, 0]
 
-    cdef Image image
-    image.flat = <float *> malloc(image_rgb.shape[0] * image_rgb.shape[1] * image_rgb.shape[2] * sizeof(float))
-    image.shape0 = image_rgb.shape[0]
-    image.shape1 = image_rgb.shape[1]
-    image.shape2 = image_rgb.shape[2]
-    for y in range(image.shape0):
-        for x in range(image.shape1):
-            for i in range(image.shape2):
-                image.flat[y * image.shape1 * image.shape2 + x * image.shape2 + i] = image_rgb[y, x, i]
-
     for y in range(yres):
         output_pixel_4bit = 0
         for x in range(xres):
             for i in range(3):
-                input_pixel_rgb[i] = image.flat[y * image.shape1 * image.shape2 + x * image.shape2 + i]
+                input_pixel_rgb[i] = cimage_rgb.flat[
+                    y * cimage_rgb.shape1 * cimage_rgb.shape2 + x * cimage_rgb.shape2 + i]
             if lookahead:
                 palette_choices_4bit, palette_choices_rgb = lookahead_options(
                     screen, lookahead, output_pixel_4bit, x % 4)
                 output_pixel_4bit, output_pixel_rgb = \
                     dither_lookahead(
-                        &cdither, screen, &image, x, y, palette_choices_4bit, palette_choices_rgb, lookahead)
+                        &cdither, screen, &cimage_rgb, x, y, palette_choices_4bit, palette_choices_rgb, lookahead)
             else:
                 palette_choices_4bit, palette_choices_rgb = screen.pixel_palette_options(output_pixel_4bit, x)
                 output_pixel_4bit, output_pixel_rgb = \
@@ -262,10 +258,10 @@ def dither_image(screen, float[:, :, ::1] image_rgb, dither, int lookahead):
             for i in range(3):
                 quant_error[i] = input_pixel_rgb[i] - output_pixel_rgb[i]
             image_4bit[y, x] = output_pixel_4bit
-            apply(&cdither, screen, x, y, &image, quant_error)
+            apply(&cdither, screen, x, y, &cimage_rgb, quant_error)
             for i in range(3):
                 image_rgb[y, x, i] = output_pixel_rgb[i]
 
     free(cdither.pattern)
-    free(image.flat)
+    free(cimage_rgb.flat)
     return image_4bit, np.array(image_rgb)
