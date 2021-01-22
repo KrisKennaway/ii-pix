@@ -9,11 +9,17 @@ from libc.stdlib cimport malloc, free
 
 # TODO: use a cdef class
 cdef struct Dither:
-    float* pattern
+    float* pattern   # Flattened dither pattern
     int x_shape
     int y_shape
     int x_origin
     int y_origin
+
+cdef struct Image:
+    float* flat   # Flattened image array
+    int shape0
+    int shape1
+    int shape2
 
 
 @cython.boundscheck(False)
@@ -36,7 +42,7 @@ cdef void apply_one_line(Dither* dither, int xl, int xr, int x, float[] image, i
 
 @cython.boundscheck(False)
 @cython.wraparound(False)
-cdef apply(Dither* dither, screen, int x, int y, float [:, :, ::1]image, float[] quant_error):
+cdef apply(Dither* dither, screen, int x, int y, Image* image, float[] quant_error):
     cdef int i, j, k
 
     cdef int yt = dither_bounds_yt(dither, y)
@@ -53,7 +59,8 @@ cdef apply(Dither* dither, screen, int x, int y, float [:, :, ::1]image, float[]
         for j in range(xl, xr):
             for k in range(3):
                 error = dither.pattern[(i - y) * dither.x_shape + j - x + dither.x_origin] * quant_error[k]
-                image[i, j, k] = clip(image[i, j, k] + error, 0, 255)
+                image.flat[i * image.shape1 * image.shape2 + j * image.shape2 + k] = clip(
+                    image.flat[i * image.shape1 * image.shape2 + j * image.shape2 + k] + error, 0, 255)
 
 
 @cython.boundscheck(False)
@@ -88,7 +95,7 @@ cdef int dither_bounds_yb(Dither *dither, int y_res, int y):
 @cython.boundscheck(False)
 @cython.wraparound(False)
 cdef dither_lookahead(Dither* dither,
-        screen, float[:,:,::1] image_rgb, int x, int y, unsigned char[:, ::1] options_4bit,
+        screen, Image* image_rgb, int x, int y, unsigned char[:, ::1] options_4bit,
         float[:, :, ::1] options_rgb, int lookahead):
     cdef int x_res = screen.X_RES
 
@@ -107,7 +114,8 @@ cdef dither_lookahead(Dither* dither,
         # Copies of input pixels so we can dither in bulk
         for j in range(xxr - x):
             for k in range(3):
-                lah_image_rgb[i * lah_shape1 * lah_shape2 + j * lah_shape2 + k] = image_rgb[y, x+j, k]
+                lah_image_rgb[i * lah_shape1 * lah_shape2 + j * lah_shape2 + k] = image_rgb.flat[
+                    y * image_rgb.shape1 * image_rgb.shape2 + (x+j) * image_rgb.shape2 + k]
         # Leave enough space at right of image so we can dither the last of our lookahead pixels.
         for j in range(xxr - x, lookahead + xr - xl):
             for k in range(3):
@@ -213,7 +221,7 @@ def dither_image(screen, float[:, :, ::1] image_rgb, dither, int lookahead):
     cdef (unsigned char)[:, ::1] options_4bit
     cdef float[:, :, ::1] options_rgb
     cdef unsigned char output_pixel_4bit
-    cdef float[::1] input_pixel_rgb
+    cdef float[3] input_pixel_rgb
 
     cdef Dither cdither
     cdither.y_shape = dither.PATTERN.shape[0]
@@ -226,16 +234,27 @@ def dither_image(screen, float[:, :, ::1] image_rgb, dither, int lookahead):
         for j in range(cdither.x_shape):
             cdither.pattern[i * cdither.x_shape + j] = dither.PATTERN[i, j, 0]
 
+    cdef Image image
+    image.flat = <float *> malloc(image_rgb.shape[0] * image_rgb.shape[1] * image_rgb.shape[2] * sizeof(float))
+    image.shape0 = image_rgb.shape[0]
+    image.shape1 = image_rgb.shape[1]
+    image.shape2 = image_rgb.shape[2]
+    for y in range(image.shape0):
+        for x in range(image.shape1):
+            for i in range(image.shape2):
+                image.flat[y * image.shape1 * image.shape2 + x * image.shape2 + i] = image_rgb[y, x, i]
+
     for y in range(yres):
         output_pixel_4bit = 0
         for x in range(xres):
-            input_pixel_rgb = image_rgb[y, x, :]
+            for i in range(3):
+                input_pixel_rgb[i] = image.flat[y * image.shape1 * image.shape2 + x * image.shape2 + i]
             if lookahead:
                 palette_choices_4bit, palette_choices_rgb = lookahead_options(
                     screen, lookahead, output_pixel_4bit, x % 4)
                 output_pixel_4bit, output_pixel_rgb = \
                     dither_lookahead(
-                        &cdither, screen, image_rgb, x, y, palette_choices_4bit, palette_choices_rgb, lookahead)
+                        &cdither, screen, &image, x, y, palette_choices_4bit, palette_choices_rgb, lookahead)
             else:
                 palette_choices_4bit, palette_choices_rgb = screen.pixel_palette_options(output_pixel_4bit, x)
                 output_pixel_4bit, output_pixel_rgb = \
@@ -243,9 +262,10 @@ def dither_image(screen, float[:, :, ::1] image_rgb, dither, int lookahead):
             for i in range(3):
                 quant_error[i] = input_pixel_rgb[i] - output_pixel_rgb[i]
             image_4bit[y, x] = output_pixel_4bit
-            apply(&cdither, screen, x, y, image_rgb, quant_error)
+            apply(&cdither, screen, x, y, &image, quant_error)
             for i in range(3):
                 image_rgb[y, x, i] = output_pixel_rgb[i]
 
     free(cdither.pattern)
+    free(image.flat)
     return image_4bit, np.array(image_rgb)
