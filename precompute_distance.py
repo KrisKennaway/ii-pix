@@ -6,6 +6,8 @@ runtime for efficient access.
 """
 
 import argparse
+import os
+
 import image
 import palette as palette_py
 import colour.difference
@@ -60,6 +62,10 @@ def main():
     for palette_name in palette_names:
         print("Processing palette %s" % palette_name)
         palette = palette_py.PALETTES[palette_name](load_distances=False)
+        try:
+            os.mkdir(os.path.dirname(palette.DISTANCES_PATH))
+        except FileExistsError:
+            pass
         n = nearest_colours(palette, all_lab)
         out = np.memmap(filename=palette.DISTANCES_PATH, mode="w+",
                         dtype=np.uint8, shape=n.shape)
