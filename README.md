@@ -48,7 +48,7 @@ See [here](examples/gallery.md) for more sample image conversions.
 This image was generated using
 
 ```buildoutcfg
-python convert.py --lookahead 8 --palette openemulator examples/Vibrant_Wings.jpg examples/wings-openemulator.dhr
+python convert.py --lookahead 8 --palette openemulator examples/parrots-original.png examples/parrots-iipix-openemulator.dhr
 ```
 
 The resulting ][-pix preview PNG image is shown here.  The Virtual II emulator renders the double hi-res image identically to this generated preview image, when using `--palette=virtualii` (not shown here)
