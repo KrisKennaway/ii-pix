@@ -1,3 +1,5 @@
+"""Image transformation functions."""
+
 import numpy as np
 from PIL import Image
 
@@ -34,7 +36,6 @@ def resize(image: Image, x_res, y_res, srgb_output: bool = False) -> Image:
     # Convert to linear RGB before rescaling so that colour interpolation is
     # in linear space
     linear = srgb_to_linear(np.asarray(image)).astype(np.uint8)
-    # linear = np.asarray(image).astype(np.uint8)
     res = Image.fromarray(linear).resize((x_res, y_res), Image.LANCZOS)
     if srgb_output:
         return Image.fromarray(

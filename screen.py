@@ -1,3 +1,5 @@
+"""Representation of Apple II screen memory."""
+
 import numpy as np
 import palette as palette_py
 
@@ -23,9 +25,15 @@ class Screen:
         return 1024 * c + 128 * b + 40 * a
 
     def _image_to_bitmap(self, image: np.ndarray) -> np.ndarray:
+        """Converts 4-bit image to 2-bit image bitmap.
+
+        Each 4-bit colour value maps to a sliding window of 4 successive pixels,
+        via x%4.
+        """
         raise NotImplementedError
 
     def pack(self, image: np.ndarray):
+        """Packs an image into memory format (8k AUX + 8K MAIN)."""
         bitmap = self._image_to_bitmap(image)
         # The DHGR display encodes 7 pixels across interleaved 4-byte sequences
         # of AUX and MAIN memory, as follows:
@@ -53,6 +61,12 @@ class Screen:
         return bitmap
 
     def bitmap_to_image_rgb(self, bitmap: np.ndarray) -> np.ndarray:
+        """Convert our 2-bit bitmap image into a RGB image.
+
+        Colour at every pixel is determined by the value of a 4-bit sliding
+        window indexed by x % 4, which gives the index into our 16-colour RGB
+        palette.
+        """
         image_rgb = np.empty((192, 560, 3), dtype=np.uint8)
         for y in range(self.Y_RES):
             pixel = [False, False, False, False]
@@ -63,6 +77,7 @@ class Screen:
         return image_rgb
 
     def pixel_palette_options(self, last_pixel_4bit, x: int):
+        """Returns available colours for given x pos and 4-bit colour of x-1"""
         raise NotImplementedError
 
 
@@ -85,6 +100,7 @@ class DHGR140Screen(Screen):
         return bitmap
 
     def pixel_palette_options(self, last_pixel_4bit, x: int):
+        # All 16 colour choices are available at every x position.
         return (
             np.array(list(self.palette.RGB.keys()), dtype=np.uint8),
             np.array(list(self.palette.RGB.values()), dtype=np.uint8))
@@ -107,6 +123,9 @@ class DHGR560Screen(Screen):
         return bitmap
 
     def pixel_palette_options(self, last_pixel_4bit, x: int):
+        # The two available colours for position x are given by the 4-bit
+        # value of position x-1, and the 4-bit value produced by toggling the
+        # value of the x % 4 bit (the current value of NTSC phase)
         last_dots = self.palette.DOTS[last_pixel_4bit]
         other_dots = list(last_dots)
         other_dots[x % 4] = not other_dots[x % 4]

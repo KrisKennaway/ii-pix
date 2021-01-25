@@ -1,3 +1,5 @@
+"""Error diffusion dither patterns."""
+
 import numpy as np
 
 

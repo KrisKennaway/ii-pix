@@ -1,3 +1,5 @@
+"""RGB colour palettes to target for Apple II image conversions."""
+
 import numpy as np
 import image
 

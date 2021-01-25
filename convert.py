@@ -1,3 +1,5 @@
+"""Image converter to Apple II Double Hi-Res format."""
+
 import argparse
 import os.path
 import time
@@ -13,11 +15,8 @@ import screen as screen_py
 
 
 # TODO:
-# - support alternate palettes properly
-# - compare to bmp2dhr and a2bestpix
 # - support LR/DLR
 # - support HGR
-# - README
 
 
 def main():
@@ -62,6 +61,7 @@ def main():
         screen = screen_py.DHGR140Screen(palette)
         lookahead = 0
 
+    # Open and resize source image
     image = image_py.open(args.input)
     resized = np.array(
         image_py.resize(image, screen.X_RES, screen.Y_RES)).astype(np.float32)
@@ -70,10 +70,10 @@ def main():
 
     dither = dither_pattern.PATTERNS[args.dither]()
 
-    start = time.time()
+    # start = time.time()
     output_4bit, output_rgb = dither_pyx.dither_image(
         screen, resized, dither, lookahead)
-    print(time.time() - start)
+    # print(time.time() - start)
 
     if args.resolution == 140:
         # Show un-fringed 140px output image
@@ -92,9 +92,9 @@ def main():
     if args.show_output:
         out_image.show()
 
+    # Save Double hi-res image
     outfile = os.path.join(os.path.splitext(args.output)[0] + "-preview.png")
     out_image.save(outfile, "PNG")
-
     with open(args.output, "wb") as f:
         f.write(bytes(screen.main))
         f.write(bytes(screen.aux))

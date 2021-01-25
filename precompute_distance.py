@@ -1,3 +1,10 @@
+"""Precompute CIE2000 perceptual colour distance matrices.
+
+The matrix of delta-E values is computed for all pairs of 24-bit RGB values,
+and 4-bit Apple II target palette.  This is a 256MB file that is mmapped at
+runtime for efficient access.
+"""
+
 import argparse
 import image
 import palette as palette_py
