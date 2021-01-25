@@ -87,7 +87,7 @@ If we imagine drawing pixels from left to right across the screen, at each pixel
 
 This can be summarized in a chart, showing the possible colour transitions depending on the colour of the pixel to the immediate left, and the value of x%4.
 
-![Double hi-res colour transitions](docs/Double Hi-Res colour transitions.png)
+![Double hi-res colour transitions](docs/Double_Hi-Res_colour_transitions.png)
 
 So, if we want to transition from one colour to a particular new colour, it may take up to 4 horizontal pixels before we are able to achieve it (e.g. transitioning all the way from black (0000) to white (1111)).  In the meantime we have to transition through up to 2 other colours.  Depending on the details of the image we are aiming for, this may either produce unwanted visual noise, or can actually be beneficial (e.g. if the colour we want is available immediately at the next pixel)
 
