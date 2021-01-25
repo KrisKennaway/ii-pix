@@ -48,9 +48,13 @@ def main():
               "and looking ahead over next --lookahead pixels to optimize the "
               "colour sequence.")
     )
+    parser.add_argument(
+        '--palette', type=str, choices=list(palette_py.PALETTES.keys()),
+        default=palette_py.DEFAULT_PALETTE,
+        help="RGB colour palette to dither to.")
     args = parser.parse_args()
 
-    palette = palette_py.Palette()
+    palette = palette_py.PALETTES[args.palette]()
     if args.resolution == 560:
         screen = screen_py.DHGR560Screen(palette)
         lookahead = args.lookahead
@@ -59,7 +63,6 @@ def main():
         lookahead = 0
 
     image = image_py.open(args.input)
-    # TODO: better performance with malloc'ed array?
     resized = np.array(
         image_py.resize(image, screen.X_RES, screen.Y_RES)).astype(np.float32)
     if args.show_input:
@@ -85,11 +88,11 @@ def main():
     # Show output image
     out_image = Image.fromarray(image_py.linear_to_srgb(output_rgb).astype(
         np.uint8))
+    out_image = image_py.resize(out_image, 560, 384, srgb_output=True)
     if args.show_output:
-        # out_image.show()
-        image_py.resize(out_image, 560, 384, srgb_output=True).show()
+        out_image.show()
 
-    outfile = os.path.join(os.path.splitext(args.output)[0] + "_preview.png")
+    outfile = os.path.join(os.path.splitext(args.output)[0] + "-preview.png")
     out_image.save(outfile, "PNG")
 
     with open(args.output, "wb") as f:

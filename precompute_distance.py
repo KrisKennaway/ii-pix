@@ -1,3 +1,4 @@
+import argparse
 import image
 import palette as palette_py
 import colour.difference
@@ -14,14 +15,17 @@ def rgb_to_lab(rgb: np.ndarray):
     return colour.XYZ_to_Lab(xyz)
 
 
-def nearest_colours(palette):
-    diffs = np.empty((COLOURS ** 3, 16), dtype=np.float32)
+def all_lab_colours():
     all_rgb = np.array(tuple(np.ndindex(COLOURS, COLOURS, COLOURS)),
                        dtype=np.uint8)
-    all_lab = rgb_to_lab(all_rgb)
+    return rgb_to_lab(all_rgb)
 
-    for i, palette_rgb in palette.RGB.items():
-        print(i)
+
+def nearest_colours(palette, all_lab):
+    diffs = np.empty((COLOURS ** 3, 16), dtype=np.float32)
+
+    for i, palette_rgb in sorted(palette.RGB.items()):
+        print("...palette colour %d" % i)
         palette_lab = rgb_to_lab(palette_rgb)
         diffs[:, i] = colour.difference.delta_E_CIE2000(all_lab, palette_lab)
 
@@ -30,11 +34,29 @@ def nearest_colours(palette):
 
 
 def main():
-    palette = palette_py.Palette()
-    n = nearest_colours(palette)
-    out = np.memmap(filename="distances_default.npy", mode="w+", dtype=np.uint8,
-                    shape=n.shape)
-    out[:] = n[:]
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--palette', type=str, choices=list(
+        palette_py.PALETTES.keys()),
+                        default=palette_py.DEFAULT_PALETTE,
+                        help="Palette for which to compute distance matrix.")
+    parser.add_argument('--all', type=bool, default=False,
+                        help="Whether to compute distances for all palettes")
+    args = parser.parse_args()
+
+    if args.all:
+        palette_names = list(palette_py.PALETTES.keys())
+    else:
+        palette_names = [args.palette]
+
+    print("Precomputing matrix of all 24-bit LAB colours")
+    all_lab = all_lab_colours()
+    for palette_name in palette_names:
+        print("Processing palette %s" % palette_name)
+        palette = palette_py.PALETTES[palette_name](load_distances=False)
+        n = nearest_colours(palette, all_lab)
+        out = np.memmap(filename=palette.DISTANCES_PATH, mode="w+",
+                        dtype=np.uint8, shape=n.shape)
+        out[:] = n[:]
 
 
 if __name__ == "__main__":
