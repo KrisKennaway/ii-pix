@@ -6,13 +6,19 @@ class DitherPattern:
     ORIGIN = None
 
 
+class NoDither(DitherPattern):
+    """No dithering."""
+    PATTERN = np.array(((0, 0), (0, 0)),
+                       dtype=np.float32).reshape(2, 2, 1) / np.float(16)
+    ORIGIN = (0, 1)
+
+
 class FloydSteinbergDither(DitherPattern):
     """Floyd-Steinberg dither."""
     # 0 * 7
     # 3 5 1
     PATTERN = np.array(((0, 0, 7), (3, 5, 1)),
                        dtype=np.float32).reshape(2, 3, 1) / np.float(16)
-    # XXX X_ORIGIN since ORIGIN[0] == 0
     ORIGIN = (0, 1)
 
 
@@ -24,7 +30,6 @@ class FloydSteinbergDither2(DitherPattern):
         ((0, 0, 0, 0, 0, 7),
          (3, 5, 1, 0, 0, 0)),
         dtype=np.float32).reshape(2, 6, 1) / np.float(16)
-    # XXX X_ORIGIN since ORIGIN[0] == 0
     ORIGIN = (0, 2)
 
 
@@ -39,7 +44,7 @@ class BuckelsDither(DitherPattern):
 
 
 class JarvisDither(DitherPattern):
-    """Jarvis dithering."""
+    """Jarvis-Judice-Ninke dithering."""
 
     # 0 0 X 7 5
     # 3 5 7 5 3
@@ -49,73 +54,15 @@ class JarvisDither(DitherPattern):
     ORIGIN = (0, 2)
 
 
-class NoDither(DitherPattern):
-    """Floyd-Steinberg dither."""
-    # 0 * 7
-    # 3 5 1
-    PATTERN = np.array(((0, 0), (0, 0)),
-                       dtype=np.float32).reshape(2, 2, 1) / np.float(16)
-    # XXX X_ORIGIN since ORIGIN[0] == 0
-    ORIGIN = (0, 1)
+class JarvisModifiedDither(DitherPattern):
+    """Jarvis dithering, modified to diffuse errors to 4 forward x positions.
 
-
-class TestDither(DitherPattern):
-    """Jarvis dithering."""
-
-    # 0 0 X 7 5
-    # 3 5 7 5 3
-    # 1 3 5 3 1
-    PATTERN = np.array((
-        (0, 0, 0, 31, 29, 27, 25),
-        (3, 5, 7, 5, 3, 1, 0),
-        (1, 3, 5, 3, 1, 0, 0)), dtype=np.float32).reshape(3, 7, 1)
-    PATTERN /= np.sum(PATTERN)
-    ORIGIN = (0, 2)
-
-
-class xTestDither(DitherPattern):
-    """Jarvis dithering."""
-
-    # 0 0 X 7 5
-    # 3 5 7 5 3
-    # 1 3 5 3 1
-    PATTERN = np.array((
-        (0, 0, 15, 15, 15, 15),
-        (3, 3, 5, 5, 1, 1)), dtype=np.float32).reshape(2, 6, 1)
-    PATTERN /= np.sum(PATTERN)
-    ORIGIN = (0, 1)
-
-
-class TestDither(DitherPattern):
-    """Jarvis dithering."""
-
-    # 0 0 X 7 5
-    # 3 5 7 5 3
-    # 1 3 5 3 1
-    PATTERN = np.array((
-        (0, 0, 0, 7, 7, 7, 7),
-        (3, 5, 7, 5, 3, 1, 0),
-        (1, 3, 5, 3, 1, 0, 0)), dtype=np.float32).reshape(3, 7, 1)
-    PATTERN /= np.sum(PATTERN)
-    ORIGIN = (0, 2)
-
-# !!
-class TestDither(DitherPattern):
-    """Jarvis dithering."""
-
-    # 0 0 X 7 5
-    # 3 5 7 5 3
-    # 1 3 5 3 1
-    PATTERN = np.array((
-        (0, 0, 0, 9, 7, 5, 3),
-        (3, 5, 7, 5, 3, 1, 0),
-        (1, 3, 5, 3, 1, 0, 0)), dtype=np.float32).reshape(3, 7, 1)
-    PATTERN /= np.sum(PATTERN)
-    ORIGIN = (0, 2)
-
-# !!!
-class TestDither(DitherPattern):
-    """Jarvis dithering."""
+    This works well for double hi-res dithering, since the "best" colour
+    match to a given pixel may only be accessible up to 4 x-positions further
+    on.  Standard Jarvis dithering only propagates errors for 2 x-positions
+    in the forward direction, which means that errors may have diffused away
+    before we get to the pixel that can best take advantage of it.
+    """
 
     # 0 0 X 7 5
     # 3 5 7 5 3
@@ -127,43 +74,6 @@ class TestDither(DitherPattern):
     PATTERN /= np.sum(PATTERN)
     ORIGIN = (0, 2)
 
-class xTestDither(DitherPattern):
-    """Jarvis dithering."""
-
-    # 0 0 X 7 5
-    # 3 5 7 5 3
-    # 1 3 5 3 1
-    PATTERN = np.array((
-        (0, 0, 0, 9, 9,9,9),
-        (3, 5, 7, 5, 3, 1, 0),
-        (1, 3, 5, 3, 1, 0, 0)), dtype=np.float32).reshape(3, 7, 1)
-    PATTERN /= np.sum(PATTERN)
-    ORIGIN = (0, 2)
-class xTestDither(DitherPattern):
-    """Jarvis dithering."""
-
-    # 0 0 X 7 5
-    # 3 5 7 5 3
-    # 1 3 5 3 1
-    PATTERN = np.array((
-        (0, 0, 0, 15,13,11,9),
-        (3, 5, 7, 5, 3, 1, 0),
-        (1, 3, 5, 3, 1, 0, 0)), dtype=np.float32).reshape(3, 7, 1)
-    PATTERN /= np.sum(PATTERN)
-    ORIGIN = (0, 2)
-
-class xTestDither(DitherPattern):
-    """Jarvis dithering."""
-
-    # 0 0 X 7 5
-    # 3 5 7 5 3
-    # 1 3 5 3 1
-    PATTERN = np.array((
-        (0, 0, 15,),
-        (3, 5, 1,)), dtype=np.float32).reshape(2, 3, 1)
-    PATTERN /= np.sum(PATTERN)
-    ORIGIN = (0, 1)
-
 
 PATTERNS = {
     'floyd': FloydSteinbergDither,
@@ -171,8 +81,8 @@ PATTERNS = {
     'floyd-steinberg': FloydSteinbergDither,
     'buckels': BuckelsDither,
     'jarvis': JarvisDither,
-    'test': TestDither,
+    'jarvis-mod': JarvisModifiedDither,
     'none': NoDither
 }
 
-DEFAULT_PATTERN = 'jarvis'
+DEFAULT_PATTERN = 'jarvis-mod'
