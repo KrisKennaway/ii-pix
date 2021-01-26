@@ -63,10 +63,10 @@ def main():
 
     # Open and resize source image
     image = image_py.open(args.input)
-    resized = np.array(
-        image_py.resize(image, screen.X_RES, screen.Y_RES)).astype(np.float32)
     if args.show_input:
-        Image.fromarray(resized.astype(np.uint8)).show()
+        image_py.resize(image, 560, 384, srgb_output=True).show()
+    resized = np.array(image_py.resize(image, screen.X_RES,
+                                       screen.Y_RES)).astype(np.float32)
 
     dither = dither_pattern.PATTERNS[args.dither]()
 
