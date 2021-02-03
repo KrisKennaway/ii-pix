@@ -92,6 +92,10 @@ def main():
     if args.show_output:
         out_image.show()
 
+    ntsc = Image.fromarray(screen.bitmap_to_ntsc(bitmap))
+    ntsc = image_py.resize(ntsc, 560 * 3 // 2, 384 * 3 // 2, srgb_output=True)
+    ntsc.show()
+
     # Save Double hi-res image
     outfile = os.path.join(os.path.splitext(args.output)[0] + "-preview.png")
     out_image.save(outfile, "PNG")

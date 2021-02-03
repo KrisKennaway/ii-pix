@@ -80,6 +80,81 @@ class Screen:
         """Returns available colours for given x pos and 4-bit colour of x-1"""
         raise NotImplementedError
 
+    @staticmethod
+    def _sin(pos, phase0=3):
+        x = pos % 12 + phase0
+        return 8 * np.sin(x * 2 * np.pi / 12)
+
+    @staticmethod
+    def _cos(pos, phase0=3):
+        x = pos % 12 + phase0
+        return 8 * np.cos(x * 2 * np.pi / 12)
+
+    def _read(self, line, pos):
+        if pos < 0:
+            return 0
+
+        # Sather says black level is 0.36V and white level 1.1V, but this
+        # doesn't seem to be right (they correspond to values -29 and +33)
+        # which means that 0101 grey has Y value ~0, i.e. is black.  These are
+        # only mentioned as labels on figure 8.2 though.
+        #
+        # _The Apple II Circuit description_ by W. Gayler gives black=0.5V
+        # and white=2.0V which is much more plausible.
+        #
+        # Conversion is given by floor((voltage-0.518)*1000/12)-15
+        return 108 if line[pos] else -16
+
+    def bitmap_to_ntsc(self, bitmap: np.ndarray) -> np.ndarray:
+        """
+        See http://forums.nesdev.com/viewtopic.php?p=172329#p172329
+        """
+        y_width = 12
+        i_width = 24
+        q_width = 24
+
+        contrast = 167941
+        saturation = 144044
+
+        yr = contrast / y_width
+        ir = contrast * 1.994681e-6 * saturation / i_width
+        qr = contrast * 9.915742e-7 * saturation / q_width
+
+        yg = contrast / y_width
+        ig = contrast * 9.151351e-8 * saturation / i_width
+        qg = contrast * -6.334805e-7 * saturation / q_width
+
+        yb = contrast / y_width
+        ib = contrast * -1.012984e-6 * saturation / i_width
+        qb = contrast * 1.667217e-6 * saturation / q_width
+
+        #print("*r: ", yr, ir, qr)
+        out_rgb = np.empty((192, 560 * 3, 3), dtype=np.uint8)
+        for y in range(self.Y_RES):
+            ysum = 0
+            isum = 0
+            qsum = 0
+            line = np.repeat(bitmap[y], 3)
+            #line = np.ones((self.X_RES * 3,), dtype=np.bool)
+            #line = np.repeat(np.tile((True, False), 280), 3)
+            for x in range(560 * 3):
+                ysum += self._read(line, x) - self._read(line, x - y_width)
+                isum += self._read(line, x) * self._cos(x) - self._read(
+                    line, x - i_width) * self._cos((x - i_width))
+                qsum += self._read(line, x) * self._sin(x) - self._read(
+                    line, x - q_width) * self._sin((x - q_width))
+
+                r = min(255, max(0, ysum * yr + isum * ir + qsum * qr) /
+                        65536)
+                g = min(255,
+                        max(0, (ysum * yg + isum * ig + qsum * qg) / 65536))
+                b = min(255,
+                        max(0, (ysum * yb + isum * ib + qsum * qb) / 65536))
+                # print(r,g,b)
+                out_rgb[y, x, :] = (r, g, b)
+
+        return out_rgb
+
 
 class DHGR140Screen(Screen):
     """DHGR screen ignoring colour fringing, i.e. treating as 140x192x16."""
