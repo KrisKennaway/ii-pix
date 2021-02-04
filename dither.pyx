@@ -1,8 +1,10 @@
 # cython: infer_types=True
+# cython: profile=True
 
 cimport cython
 import functools
 import numpy as np
+# cimport numpy as np
 # from cython.parallel import prange
 from cython.view cimport array as cvarray
 from libc.stdlib cimport malloc, free
@@ -28,25 +30,25 @@ cdef float clip(float a, float min_value, float max_value) nogil:
 
 
 
-cdef int dither_bounds_xl(Dither *dither, int x):
+cdef int dither_bounds_xl(Dither *dither, int x) nogil:
     cdef int el = max(dither.x_origin - x, 0)
     cdef int xl = x - dither.x_origin + el
     return xl
 
 
-cdef int dither_bounds_xr(Dither *dither, int x_res, int x):
+cdef int dither_bounds_xr(Dither *dither, int x_res, int x) nogil:
     cdef int er = min(dither.x_shape, x_res - x)
     cdef int xr = x - dither.x_origin + er
     return xr
 
 
-cdef int dither_bounds_yt(Dither *dither, int y):
+cdef int dither_bounds_yt(Dither *dither, int y) nogil:
     cdef int et = max(dither.y_origin - y, 0)
     cdef int yt = y - dither.y_origin + et
 
     return yt
 
-cdef int dither_bounds_yb(Dither *dither, int y_res, int y):
+cdef int dither_bounds_yb(Dither *dither, int y_res, int y) nogil:
     cdef int eb = min(dither.y_shape, y_res - y)
     cdef int yb = y - dither.y_origin + eb
     return yb
@@ -75,11 +77,9 @@ def lookahead_options(screen, lookahead, last_pixel_nbit, x):
 
 @cython.boundscheck(False)
 @cython.wraparound(False)
-cdef dither_lookahead(Dither* dither,
-        screen, Image* image_rgb, int x, int y, unsigned char[:, ::1] options_nbit,
-        float[:, :, ::1] options_rgb, int lookahead):
-    cdef int x_res = screen.X_RES
-
+cdef int dither_lookahead(Dither* dither,
+        Image* image_rgb, int x, int y, unsigned char[:, ::1] options_4bit,
+        float[:, :, ::1] options_rgb, int lookahead, unsigned char[:, ::1] distances, int x_res):
     cdef int xl = dither_bounds_xl(dither, x)
     cdef int xr = dither_bounds_xr(dither, x_res, x)
 
@@ -126,7 +126,6 @@ cdef dither_lookahead(Dither* dither,
     cdef long flat, dist
 
     cdef long r, g, b
-    cdef (unsigned char)[:, ::1] distances = screen.palette.distances
     for i in range(2**lookahead):
         total_error = 0
         for j in range(lookahead):
@@ -145,10 +144,10 @@ cdef dither_lookahead(Dither* dither,
             best_error = total_error
             best = i
     free(lah_image_rgb)
-    return options_nbit[best, 0], options_rgb[best, 0, :]
+    return best
 
 
-cdef void apply_one_line(Dither* dither, int xl, int xr, int x, float[] image, int image_shape1, float[] quant_error):
+cdef void apply_one_line(Dither* dither, int xl, int xr, int x, float[] image, int image_shape1, float[] quant_error) nogil:
     cdef int i, j
     cdef float error
 
@@ -158,13 +157,13 @@ cdef void apply_one_line(Dither* dither, int xl, int xr, int x, float[] image, i
             image[i * image_shape1 + j] = clip(image[i * image_shape1 + j] + error, 0, 255)
 
 
-cdef apply(Dither* dither, screen, int x, int y, Image* image, float[] quant_error):
+cdef apply(Dither* dither, int x_res, int y_res, int x, int y, Image* image, float[] quant_error):
     cdef int i, j, k
 
     cdef int yt = dither_bounds_yt(dither, y)
-    cdef int yb = dither_bounds_yb(dither, screen.Y_RES, y)
+    cdef int yb = dither_bounds_yb(dither, y_res, y)
     cdef int xl = dither_bounds_xl(dither, x)
-    cdef int xr = dither_bounds_xr(dither, screen.X_RES, x)
+    cdef int xr = dither_bounds_xr(dither, x_res, x)
 
     cdef float error
     # We could avoid clipping here, i.e. allow RGB values to extend beyond
@@ -181,14 +180,13 @@ cdef apply(Dither* dither, screen, int x, int y, Image* image, float[] quant_err
 
 @cython.boundscheck(False)
 @cython.wraparound(False)
-cdef find_nearest_colour(screen, float[3] pixel_rgb, unsigned char[::1] options_nbit, unsigned char[:, ::1] options_rgb):
-    cdef int best, dist, i
+def find_nearest_colour(float[::1] pixel_rgb, unsigned char[::1] options_4bit, unsigned char[:, ::1] options_rgb, unsigned char[:, ::1] distances):
+    cdef int best, dist
     cdef unsigned char bit4
     cdef int best_dist = 2**8
     cdef long flat
 
-    cdef (unsigned char)[:, ::1] distances = screen.palette.distances
-    for i in range(options_nbit.shape[0]):
+    for i in range(options_4bit.shape[0]):
         flat = (<long>pixel_rgb[0] << 16) + (<long>pixel_rgb[1] << 8) + <long>pixel_rgb[2]
         bit4 = options_nbit[i]
         dist = distances[flat, bit4]
@@ -239,6 +237,8 @@ def dither_image(screen, float[:, :, ::1] image_rgb, dither, int lookahead, unsi
         for j in range(cdither.x_shape):
             cdither.pattern[i * cdither.x_shape + j] = dither.PATTERN[i, j, 0]
 
+    cdef (unsigned char)[:, ::1] distances = screen.palette.distances
+
     for y in range(yres):
         if verbose:
             print("%d/%d" % (y, yres))
@@ -248,19 +248,20 @@ def dither_image(screen, float[:, :, ::1] image_rgb, dither, int lookahead, unsi
                 input_pixel_rgb[i] = cimage_rgb.flat[
                     y * cimage_rgb.shape1 * cimage_rgb.shape2 + x * cimage_rgb.shape2 + i]
             if lookahead:
-                palette_choices_nbit, palette_choices_rgb = lookahead_options(
-                    screen, lookahead, output_pixel_nbit, x % 4)
-                output_pixel_nbit, output_pixel_rgb = \
-                    dither_lookahead(
-                        &cdither, screen, &cimage_rgb, x, y, palette_choices_nbit, palette_choices_rgb, lookahead)
+                palette_choices_4bit, palette_choices_rgb = lookahead_options(
+                    screen, lookahead, output_pixel_4bit, x % 4)
+                best_idx = dither_lookahead(
+                        &cdither, &cimage_rgb, x, y, palette_choices_4bit, palette_choices_rgb, lookahead, distances, xres)
+                output_pixel_4bit = palette_choices_4bit[best_idx, 0]
+                output_pixel_rgb = palette_choices_rgb[best_idx, 0, :]
             else:
-                palette_choices_nbit, palette_choices_rgb = screen.pixel_palette_options(output_pixel_nbit, x)
-                output_pixel_nbit, output_pixel_rgb = \
-                    find_nearest_colour(screen, input_pixel_rgb, palette_choices_nbit, palette_choices_rgb)
+                palette_choices_4bit, palette_choices_rgb = screen.pixel_palette_options(output_pixel_4bit, x)
+                output_pixel_4bit, output_pixel_rgb = \
+                    find_nearest_colour(input_pixel_rgb, palette_choices_4bit, palette_choices_rgb, distances)
             for i in range(3):
                 quant_error[i] = input_pixel_rgb[i] - output_pixel_rgb[i]
-            image_nbit[y, x] = output_pixel_nbit
-            apply(&cdither, screen, x, y, &cimage_rgb, quant_error)
+            image_4bit[y, x] = output_pixel_4bit
+            apply(&cdither, xres, yres, x, y, &cimage_rgb, quant_error)
             for i in range(3):
                 image_rgb[y, x, i] = output_pixel_rgb[i]
 
