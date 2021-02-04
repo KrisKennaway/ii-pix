@@ -103,7 +103,7 @@ class Screen:
         # and white=2.0V which is much more plausible.
         #
         # Conversion is given by floor((voltage-0.518)*1000/12)-15
-        return 108 if line[pos] else -16
+        return 108 if line[pos] else 0  # -16
 
     def bitmap_to_ntsc(self, bitmap: np.ndarray) -> np.ndarray:
         """
@@ -128,15 +128,16 @@ class Screen:
         ib = contrast * -1.012984e-6 * saturation / i_width
         qb = contrast * 1.667217e-6 * saturation / q_width
 
-        #print("*r: ", yr, ir, qr)
         out_rgb = np.empty((192, 560 * 3, 3), dtype=np.uint8)
         for y in range(self.Y_RES):
             ysum = 0
             isum = 0
             qsum = 0
             line = np.repeat(bitmap[y], 3)
-            #line = np.ones((self.X_RES * 3,), dtype=np.bool)
-            #line = np.repeat(np.tile((True, False), 280), 3)
+
+            color = y // (192//16)
+            line = np.repeat(np.tile((color & 1, color & 2, color & 4,
+                                      color & 8), 140), 3)
             for x in range(560 * 3):
                 ysum += self._read(line, x) - self._read(line, x - y_width)
                 isum += self._read(line, x) * self._cos(x) - self._read(
@@ -150,7 +151,6 @@ class Screen:
                         max(0, (ysum * yg + isum * ig + qsum * qg) / 65536))
                 b = min(255,
                         max(0, (ysum * yb + isum * ib + qsum * qb) / 65536))
-                # print(r,g,b)
                 out_rgb[y, x, :] = (r, g, b)
 
         return out_rgb
