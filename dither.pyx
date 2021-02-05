@@ -77,7 +77,7 @@ def lookahead_options(screen, lookahead, last_pixel_4bit, x):
 @cython.boundscheck(False)
 @cython.wraparound(False)
 cdef int dither_lookahead(Dither* dither,
-        Image* image_rgb, int x, int y, unsigned char[:, ::1] options_4bit,
+        float[:, :, ::1] image_rgb, int x, int y, unsigned char[:, ::1] options_4bit,
         float[:, :, ::1] options_rgb, int lookahead, unsigned char[:, ::1] distances, int x_res):
     cdef int xl = dither_bounds_xl(dither, x)
     cdef int xr = dither_bounds_xr(dither, x_res, x)
@@ -86,23 +86,25 @@ cdef int dither_lookahead(Dither* dither,
     cdef int xxr = min(max(x + lookahead, xr), x_res)
     cdef int i, j, k, l
 
-    cdef int lah_shape0 = 2 ** lookahead
+    cdef int lah_shape0 = 1 << lookahead # 2 ** lookahead
     cdef int lah_shape1 = lookahead + xr - xl
     cdef int lah_shape2 = 3
     cdef float *lah_image_rgb = <float *> malloc(lah_shape0 * lah_shape1 * lah_shape2 * sizeof(float))
-    for i in range(2**lookahead):
+
+    # TODO: fold these 3 loops together
+    
+    for i in range(1 << lookahead):
         # Copies of input pixels so we can dither in bulk
         for j in range(xxr - x):
             for k in range(3):
-                lah_image_rgb[i * lah_shape1 * lah_shape2 + j * lah_shape2 + k] = image_rgb.flat[
-                    y * image_rgb.shape1 * image_rgb.shape2 + (x+j) * image_rgb.shape2 + k]
+                lah_image_rgb[i * lah_shape1 * lah_shape2 + j * lah_shape2 + k] = image_rgb[y, x+j, k]
         # Leave enough space at right of image so we can dither the last of our lookahead pixels.
         for j in range(xxr - x, lookahead + xr - xl):
             for k in range(3):
                 lah_image_rgb[i * lah_shape1 * lah_shape2 + j * lah_shape2 + k] = 0
 
     cdef float[3] quant_error
-    for i in range(2 ** lookahead):
+    for i in range(1 << lookahead):
         for j in range(xxr - x):
             xl = dither_bounds_xl(dither, j)
             xr = dither_bounds_xr(dither, x_res - x, j)
@@ -124,10 +126,9 @@ cdef int dither_lookahead(Dither* dither,
     cdef long flat, dist
 
     cdef long r, g, b
-    for i in range(2**lookahead):
+    for i in range(1 << lookahead):
         total_error = 0
         for j in range(lookahead):
-            # Clip lah_image_rgb into 0..255 range to prepare for computing colour distance
             r = <long>lah_image_rgb[i * lah_shape1 * lah_shape2 + j * lah_shape2 + 0]
             g = <long>lah_image_rgb[i * lah_shape1 * lah_shape2 + j * lah_shape2 + 1]
             b = <long>lah_image_rgb[i * lah_shape1 * lah_shape2 + j * lah_shape2 + 2]
@@ -155,7 +156,9 @@ cdef void apply_one_line(Dither* dither, int xl, int xr, int x, float[] image, i
             image[i * image_shape1 + j] = clip(image[i * image_shape1 + j] + error, 0, 255)
 
 
-cdef void apply(Dither* dither, int x_res, int y_res, int x, int y, Image* image, float[] quant_error):
+@cython.boundscheck(False)
+@cython.wraparound(False)
+cdef void apply(Dither* dither, int x_res, int y_res, int x, int y, float[:,:,::1] image, float[] quant_error):
     cdef int i, j, k
 
     cdef int yt = dither_bounds_yt(dither, y)
@@ -172,8 +175,7 @@ cdef void apply(Dither* dither, int x_res, int y_res, int x, int y, Image* image
         for j in range(xl, xr):
             for k in range(3):
                 error = dither.pattern[(i - y) * dither.x_shape + j - x + dither.x_origin] * quant_error[k]
-                image.flat[i * image.shape1 * image.shape2 + j * image.shape2 + k] = clip(
-                    image.flat[i * image.shape1 * image.shape2 + j * image.shape2 + k] + error, 0, 255)
+                image[i,j,k] = clip(image[i,j,k] + error, 0, 255)
 
 
 @cython.boundscheck(False)
@@ -217,11 +219,11 @@ def dither_image(screen, float[:, :, ::1] image_rgb, dither, int lookahead, unsi
     cimage_rgb.shape0 = image_rgb.shape[0]
     cimage_rgb.shape1 = image_rgb.shape[1]
     cimage_rgb.shape2 = image_rgb.shape[2]
-    for y in range(cimage_rgb.shape0):
-        for x in range(cimage_rgb.shape1):
-            for i in range(cimage_rgb.shape2):
-                cimage_rgb.flat[y * cimage_rgb.shape1 * cimage_rgb.shape2 + x * cimage_rgb.shape2 + i] = (
-                    image_rgb[y, x, i])
+    #for y in range(cimage_rgb.shape0):
+    #    for x in range(cimage_rgb.shape1):
+    #        for i in range(cimage_rgb.shape2):
+    #            cimage_rgb.flat[y * cimage_rgb.shape1 * cimage_rgb.shape2 + x * cimage_rgb.shape2 + i] = (
+    #                image_rgb[y, x, i])
 
     # Flatten python dither pattern array for more efficient access
     cdef Dither cdither
@@ -243,13 +245,13 @@ def dither_image(screen, float[:, :, ::1] image_rgb, dither, int lookahead, unsi
         output_pixel_nbit = 0
         for x in range(xres):
             for i in range(3):
-                input_pixel_rgb[i] = cimage_rgb.flat[
-                    y * cimage_rgb.shape1 * cimage_rgb.shape2 + x * cimage_rgb.shape2 + i]
+                input_pixel_rgb[i] = image_rgb[y,x,i]  #cimage_rgb.flat[
+                    #y * cimage_rgb.shape1 * cimage_rgb.shape2 + x * cimage_rgb.shape2 + i]
             if lookahead:
                 palette_choices_4bit, palette_choices_rgb = lookahead_options(
                     screen, lookahead, output_pixel_4bit, x % 4)
                 best_idx = dither_lookahead(
-                        &cdither, &cimage_rgb, x, y, palette_choices_4bit, palette_choices_rgb, lookahead, distances, xres)
+                        &cdither, image_rgb, x, y, palette_choices_4bit, palette_choices_rgb, lookahead, distances, xres)
                 output_pixel_4bit = palette_choices_4bit[best_idx, 0]
                 output_pixel_rgb = palette_choices_rgb[best_idx, 0, :]
             else:
@@ -259,7 +261,7 @@ def dither_image(screen, float[:, :, ::1] image_rgb, dither, int lookahead, unsi
             for i in range(3):
                 quant_error[i] = input_pixel_rgb[i] - output_pixel_rgb[i]
             image_4bit[y, x] = output_pixel_4bit
-            apply(&cdither, xres, yres, x, y, &cimage_rgb, quant_error)
+            apply(&cdither, xres, yres, x, y, image_rgb, quant_error)
             for i in range(3):
                 image_rgb[y, x, i] = output_pixel_rgb[i]
 
