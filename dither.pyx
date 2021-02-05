@@ -79,66 +79,52 @@ def lookahead_options(screen, lookahead, last_pixel_4bit, x):
 cdef int dither_lookahead(Dither* dither,
         float[:, :, ::1] image_rgb, int x, int y, unsigned char[:, ::1] options_4bit,
         float[:, :, ::1] options_rgb, int lookahead, unsigned char[:, ::1] distances, int x_res):
-    cdef int xl = dither_bounds_xl(dither, x)
-    cdef int xr = dither_bounds_xr(dither, x_res, x)
-
-    # X coord value of larger of dither bounding box or lookahead horizon
-    cdef int xxr = min(max(x + lookahead, xr), x_res)
     cdef int i, j, k, l
 
-    cdef int lah_shape0 = 1 << lookahead # 2 ** lookahead
-    cdef int lah_shape1 = lookahead + xr - xl
+    # Don't bother dithering past the lookahead horizon or edge of screen.
+    cdef int xxr = min(x + lookahead, x_res)
+    cdef int lah_shape1 = xxr - x
     cdef int lah_shape2 = 3
-    cdef float *lah_image_rgb = <float *> malloc(lah_shape0 * lah_shape1 * lah_shape2 * sizeof(float))
-
-    # TODO: fold these 3 loops together
-    
-    for i in range(1 << lookahead):
-        # Copies of input pixels so we can dither in bulk
-        for j in range(xxr - x):
-            for k in range(3):
-                lah_image_rgb[i * lah_shape1 * lah_shape2 + j * lah_shape2 + k] = image_rgb[y, x+j, k]
-        # Leave enough space at right of image so we can dither the last of our lookahead pixels.
-        for j in range(xxr - x, lookahead + xr - xl):
-            for k in range(3):
-                lah_image_rgb[i * lah_shape1 * lah_shape2 + j * lah_shape2 + k] = 0
+    cdef float *lah_image_rgb = <float *> malloc(lah_shape1 * lah_shape2 * sizeof(float))
 
     cdef float[3] quant_error
-    for i in range(1 << lookahead):
-        for j in range(xxr - x):
-            xl = dither_bounds_xl(dither, j)
-            xr = dither_bounds_xr(dither, x_res - x, j)
-            # Don't update the input at position x (since we've already chosen
-            # fixed outputs), but do propagate quantization errors to positions >x
-            # so we can compensate for how good/bad these choices were
-
-            # options_rgb choices are fixed, but we can still distribute
-            # quantization error from having made these choices, in order to compute
-            # the total error
-            for k in range(3):
-                quant_error[k] = lah_image_rgb[i * lah_shape1 * lah_shape2 + j * lah_shape2 + k] - options_rgb[i, j, k]
-            apply_one_line(dither, xl, xr, j, &lah_image_rgb[i * lah_shape1 * lah_shape2], lah_shape2, quant_error)
-
     cdef unsigned char bit4
     cdef int best
     cdef int best_error = 2**31-1
     cdef int total_error
     cdef long flat, dist
-
     cdef long r, g, b
+
     for i in range(1 << lookahead):
+        # Working copy of input pixels
+        for j in range(xxr - x):
+            for k in range(3):
+                lah_image_rgb[j * lah_shape2 + k] = image_rgb[y, x+j, k]
+
         total_error = 0
-        for j in range(lookahead):
-            r = <long>lah_image_rgb[i * lah_shape1 * lah_shape2 + j * lah_shape2 + 0]
-            g = <long>lah_image_rgb[i * lah_shape1 * lah_shape2 + j * lah_shape2 + 1]
-            b = <long>lah_image_rgb[i * lah_shape1 * lah_shape2 + j * lah_shape2 + 2]
+        for j in range(xxr - x):
+            xl = dither_bounds_xl(dither, j)
+            xr = dither_bounds_xr(dither, xxr - x, j)
+            # We don't update the input at position x (since we've already chosen
+            # fixed outputs), but we do propagate quantization errors to positions >x
+            # so we can compensate for how good/bad these choices were.  i.e. the
+            # options_rgb choices are fixed, but we can still distribute quantization error
+            # from having made these choices, in order to compute the total error.
+            for k in range(3):
+                quant_error[k] = lah_image_rgb[j * lah_shape2 + k] - options_rgb[i, j, k]
+            apply_one_line(dither, xl, xr, j, lah_image_rgb, lah_shape2, quant_error)
+
+            r = <long>lah_image_rgb[j * lah_shape2 + 0]
+            g = <long>lah_image_rgb[j * lah_shape2 + 1]
+            b = <long>lah_image_rgb[j * lah_shape2 + 2]
 
             flat = (r << 16) + (g << 8) + b
             bit4 = options_nbit[i, j]
             dist = distances[flat, bit4]
-            total_error += dist ** 2
+            total_error += dist * dist
             if total_error >= best_error:
                 break
+
         if total_error < best_error:
             best_error = total_error
             best = i
