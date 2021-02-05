@@ -17,12 +17,6 @@ cdef struct Dither:
     int x_origin
     int y_origin
 
-cdef struct Image:
-    float* flat   # Flattened image array
-    int shape0
-    int shape1
-    int shape2
-
 
 cdef float clip(float a, float min_value, float max_value) nogil:
     return min(max(a, min_value), max_value)
@@ -197,19 +191,8 @@ def dither_image(screen, float[:, :, ::1] image_rgb, dither, int lookahead, unsi
     cdef (unsigned char)[:, ::1] options_nbit
     cdef float[:, :, ::1] options_rgb
     cdef unsigned char output_pixel_nbit
-    cdef float[3] input_pixel_rgb
 
-    # Flatten python image array for more efficient access
-    cdef Image cimage_rgb
-    cimage_rgb.flat = <float *> malloc(image_rgb.shape[0] * image_rgb.shape[1] * image_rgb.shape[2] * sizeof(float))
-    cimage_rgb.shape0 = image_rgb.shape[0]
-    cimage_rgb.shape1 = image_rgb.shape[1]
-    cimage_rgb.shape2 = image_rgb.shape[2]
-    #for y in range(cimage_rgb.shape0):
-    #    for x in range(cimage_rgb.shape1):
-    #        for i in range(cimage_rgb.shape2):
-    #            cimage_rgb.flat[y * cimage_rgb.shape1 * cimage_rgb.shape2 + x * cimage_rgb.shape2 + i] = (
-    #                image_rgb[y, x, i])
+    cdef float[3] input_pixel_rgb
 
     # Flatten python dither pattern array for more efficient access
     cdef Dither cdither
@@ -231,8 +214,7 @@ def dither_image(screen, float[:, :, ::1] image_rgb, dither, int lookahead, unsi
         output_pixel_nbit = 0
         for x in range(xres):
             for i in range(3):
-                input_pixel_rgb[i] = image_rgb[y,x,i]  #cimage_rgb.flat[
-                    #y * cimage_rgb.shape1 * cimage_rgb.shape2 + x * cimage_rgb.shape2 + i]
+                input_pixel_rgb[i] = image_rgb[y,x,i]
             if lookahead:
                 palette_choices_4bit, palette_choices_rgb = lookahead_options(
                     screen, lookahead, output_pixel_4bit, x % 4)
@@ -252,5 +234,4 @@ def dither_image(screen, float[:, :, ::1] image_rgb, dither, int lookahead, unsi
                 image_rgb[y, x, i] = output_pixel_rgb[i]
 
     free(cdither.pattern)
-    free(cimage_rgb.flat)
-    return image_nbit, np.array(image_rgb)
+    return image_4bit, np.array(image_rgb)
