@@ -4,8 +4,7 @@
 cimport cython
 import functools
 import numpy as np
-cimport numpy as np
-# from cython.parallel import prange
+# cimport numpy as np
 from cython.view cimport array as cvarray
 from libc.stdlib cimport malloc, free
 
@@ -58,19 +57,19 @@ cdef int dither_bounds_yb(Dither *dither, int y_res, int y) nogil:
 @cython.wraparound(False)
 @functools.lru_cache(None)
 def lookahead_options(screen, lookahead, last_pixel_4bit, x):
-    options_4bit = np.empty([2 ** lookahead, lookahead], dtype=np.uint8)
-    options_rgb = np.empty([2 ** lookahead, lookahead, 3], dtype=np.float)
+    options_4bit = np.empty((2 ** lookahead, lookahead), dtype=np.uint8)
+    options_rgb = np.empty((2 ** lookahead, lookahead, 3), dtype=np.float32)
     for i in range(2 ** lookahead):
         output_pixel_nbit = last_pixel_nbit
         for j in range(lookahead):
             xx = x + j
             palette_choices_4bit, palette_choices_rgb = \
                 screen.pixel_palette_options(output_pixel_4bit, xx)
-            # output_pixel_4bit = palette_choices_4bit[(i & (1 << j)) >> j]
-            # output_pixel_rgb = np.array(
-            #    palette_choices_rgb[(i & (1 << j)) >> j])
-            options_4bit[i, j] = palette_choices_4bit[(i & (1 << j)) >> j]  # output_pixel_4bit
-            options_rgb[i, j, :] = palette_choices_rgb[(i & (1 << j)) >> j]  #output_pixel_rgb
+            output_pixel_4bit = palette_choices_4bit[(i & (1 << j)) >> j]
+            output_pixel_rgb = np.array(
+                palette_choices_rgb[(i & (1 << j)) >> j])
+            options_4bit[i, j] = output_pixel_4bit
+            options_rgb[i, j, :] = output_pixel_rgb
 
     return options_nbit, options_rgb
 
@@ -78,8 +77,8 @@ def lookahead_options(screen, lookahead, last_pixel_4bit, x):
 @cython.boundscheck(False)
 @cython.wraparound(False)
 cdef int dither_lookahead(Dither* dither,
-        Image* image_rgb, int x, int y, np.ndarray[np.uint8_t, ndim=2] options_4bit,
-        np.ndarray[np.float_t, ndim=3] options_rgb, int lookahead, unsigned char[:, ::1] distances, int x_res):
+        Image* image_rgb, int x, int y, unsigned char[:, ::1] options_4bit,
+        float[:, :, ::1] options_rgb, int lookahead, unsigned char[:, ::1] distances, int x_res):
     cdef int xl = dither_bounds_xl(dither, x)
     cdef int xr = dither_bounds_xr(dither, x_res, x)
 
@@ -116,7 +115,7 @@ cdef int dither_lookahead(Dither* dither,
             # the total error
             for k in range(3):
                 quant_error[k] = lah_image_rgb[i * lah_shape1 * lah_shape2 + j * lah_shape2 + k] - options_rgb[i, j, k]
-            apply_one_line(dither, xl, xr, j, &lah_image_rgb[j * lah_shape1 * lah_shape2], lah_shape2, quant_error)
+            apply_one_line(dither, xl, xr, j, &lah_image_rgb[i * lah_shape1 * lah_shape2], lah_shape2, quant_error)
 
     cdef unsigned char bit4
     cdef int best
@@ -129,9 +128,9 @@ cdef int dither_lookahead(Dither* dither,
         total_error = 0
         for j in range(lookahead):
             # Clip lah_image_rgb into 0..255 range to prepare for computing colour distance
-            r = <long>clip(lah_image_rgb[i * lah_shape1 * lah_shape2 + j * lah_shape2 + 0], 0, 255)
-            g = <long>clip(lah_image_rgb[i * lah_shape1 * lah_shape2 + j * lah_shape2 + 1], 0, 255)
-            b = <long>clip(lah_image_rgb[i * lah_shape1 * lah_shape2 + j * lah_shape2 + 2], 0, 255)
+            r = <long>lah_image_rgb[i * lah_shape1 * lah_shape2 + j * lah_shape2 + 0]
+            g = <long>lah_image_rgb[i * lah_shape1 * lah_shape2 + j * lah_shape2 + 1]
+            b = <long>lah_image_rgb[i * lah_shape1 * lah_shape2 + j * lah_shape2 + 2]
 
             flat = (r << 16) + (g << 8) + b
             bit4 = options_nbit[i, j]
@@ -156,7 +155,7 @@ cdef void apply_one_line(Dither* dither, int xl, int xr, int x, float[] image, i
             image[i * image_shape1 + j] = clip(image[i * image_shape1 + j] + error, 0, 255)
 
 
-cdef apply(Dither* dither, int x_res, int y_res, int x, int y, Image* image, float[] quant_error):
+cdef void apply(Dither* dither, int x_res, int y_res, int x, int y, Image* image, float[] quant_error):
     cdef int i, j, k
 
     cdef int yt = dither_bounds_yt(dither, y)
