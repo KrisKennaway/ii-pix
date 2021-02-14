@@ -43,7 +43,7 @@ class Palette:
 class ToHgrPalette(Palette):
     DISTANCES_PATH = "data/distances_tohgr.data"
     PALETTE_DEPTH = 4
-    
+
     # Default tohgr/bmp2dhr palette
     SRGB = {
         0: np.array((0, 0, 0)),  # Black
@@ -68,7 +68,7 @@ class ToHgrPalette(Palette):
 class OpenEmulatorPalette(Palette):
     DISTANCES_PATH = "data/distances_openemulator.data"
     PALETTE_DEPTH = 4
-    
+
     # OpenEmulator
     SRGB = {
         0: np.array((0, 0, 0)),  # Black
@@ -93,7 +93,7 @@ class OpenEmulatorPalette(Palette):
 class VirtualIIPalette(Palette):
     DISTANCES_PATH = "data/distances_virtualii.data"
     PALETTE_DEPTH = 4
-    
+
     SRGB = {
         0: np.array((0, 0, 0)),  # Black
         8: np.array((231, 36, 66)),  # Magenta
