@@ -3,6 +3,8 @@
 import numpy as np
 import palette as palette_py
 
+# TODO: rename "4bit" variable naming now that we also have palettes with 8 bit
+#  depth.
 
 class Screen:
     X_RES = None
@@ -72,7 +74,7 @@ class Screen:
             pixel = [False, False, False, False]
             for x in range(560):
                 pixel[x % 4] = bitmap[y, x]
-                dots = self.palette.DOTS_TO_4BIT[tuple(pixel)]
+                dots = self.palette.DOTS_TO_INDEX[tuple(pixel)]
                 image_rgb[y, x, :] = self.palette.RGB[dots]
         return image_rgb
 
@@ -81,12 +83,12 @@ class Screen:
         raise NotImplementedError
 
     @staticmethod
-    def _sin(pos, phase0=3):
+    def _sin(pos, phase0=4):
         x = pos % 12 + phase0
         return 8 * np.sin(x * 2 * np.pi / 12)
 
     @staticmethod
-    def _cos(pos, phase0=3):
+    def _cos(pos, phase0=4):
         x = pos % 12 + phase0
         return 8 * np.cos(x * 2 * np.pi / 12)
 
@@ -128,17 +130,18 @@ class Screen:
         ib = contrast * -1.012984e-6 * saturation / i_width
         qb = contrast * 1.667217e-6 * saturation / q_width
 
-        out_rgb = np.empty((192, 560 * 3, 3), dtype=np.uint8)
-        for y in range(self.Y_RES):
+        out_rgb = np.empty((bitmap.shape[0], bitmap.shape[1] * 3, 3),
+                           dtype=np.uint8)
+        for y in range(bitmap.shape[0]):
             ysum = 0
             isum = 0
             qsum = 0
             line = np.repeat(bitmap[y], 3)
 
-            color = y // (192//16)
-            line = np.repeat(np.tile((color & 1, color & 2, color & 4,
-                                      color & 8), 140), 3)
-            for x in range(560 * 3):
+            # color = y // (192//16)
+            # line = np.repeat(np.tile((color & 1, color & 2, color & 4,
+            #                          color & 8), 140), 3)
+            for x in range(bitmap.shape[1] * 3):
                 ysum += self._read(line, x) - self._read(line, x - y_width)
                 isum += self._read(line, x) * self._cos(x) - self._read(
                     line, x - i_width) * self._cos((x - i_width))
@@ -182,7 +185,7 @@ class DHGR140Screen(Screen):
 
 
 class DHGR560Screen(Screen):
-    """DHGR screen including colour fringing."""
+    """DHGR screen including colour fringing and 4 pixel chroma bleed."""
     X_RES = 560
     Y_RES = 192
     X_PIXEL_WIDTH = 1
@@ -205,8 +208,60 @@ class DHGR560Screen(Screen):
         other_dots = list(last_dots)
         other_dots[x % 4] = not other_dots[x % 4]
         other_dots = tuple(other_dots)
-        other_pixel_4bit = self.palette.DOTS_TO_4BIT[other_dots]
+        other_pixel_4bit = self.palette.DOTS_TO_INDEX[other_dots]
+        return (np.array([last_pixel_4bit, other_pixel_4bit], dtype=np.uint8),
+                np.array([self.palette.RGB[last_pixel_4bit],
+                          self.palette.RGB[other_pixel_4bit]], dtype=np.uint8))
+
+
+# TODO: refactor to share implementation with DHGR560Screen
+class DHGR560NTSCScreen(Screen):
+    """DHGR screen including colour fringing and 8 pixel chroma bleed."""
+    X_RES = 560
+    Y_RES = 192
+    X_PIXEL_WIDTH = 1
+
+    def _image_to_bitmap(self, image_4bit: np.ndarray) -> np.ndarray:
+        bitmap = np.zeros((self.Y_RES, self.X_RES), dtype=np.bool)
+        for y in range(self.Y_RES):
+            for x in range(self.X_RES):
+                pixel = image_4bit[y, x]
+                dots = self.palette.DOTS[pixel]
+                phase = x % 4
+                bitmap[y, x] = dots[4 + phase]
+        return bitmap
+
+    def bitmap_to_image_rgb(self, bitmap: np.ndarray) -> np.ndarray:
+        """Convert our 2-bit bitmap image into a RGB image.
+
+        Colour at every pixel is determined by the value of a 8-bit sliding
+        window indexed by x % 4, which gives the index into our 256-colour RGB
+        palette.
+        """
+        image_rgb = np.empty((192, 560, 3), dtype=np.uint8)
+        for y in range(self.Y_RES):
+            pixel = [False, False, False, False, False, False, False, False]
+            for x in range(560):
+                pixel[x % 4] = pixel[x % 4 + 4]
+                pixel[x % 4 + 4] = bitmap[y, x]
+                dots = self.palette.DOTS_TO_INDEX[tuple(pixel)]
+                image_rgb[y, x, :] = self.palette.RGB[dots]
+        return image_rgb
+
+    def pixel_palette_options(self, last_pixel_4bit, x: int):
+        # The two available 8-bit pixel colour choices are given by:
+        # - Rotating the pixel value from the current x % 4 + 4 position to
+        #   x % 4
+        # - choosing 0 and 1 for the new values of x % 4 + 4
+        next_dots0 = list(self.palette.DOTS[last_pixel_4bit])
+        next_dots1 = list(next_dots0)
+        next_dots0[x % 4] = next_dots0[x % 4 + 4]
+        next_dots0[x % 4 + 4] = False
+        next_dots1[x % 4] = next_dots1[x % 4 + 4]
+        next_dots1[x % 4 + 4] = True
+        pixel_4bit_0 = self.palette.DOTS_TO_INDEX[tuple(next_dots0)]
+        pixel_4bit_1 = self.palette.DOTS_TO_INDEX[tuple(next_dots1)]
         return (
-            np.array([last_pixel_4bit, other_pixel_4bit], dtype=np.uint8),
-            np.array([self.palette.RGB[last_pixel_4bit],
-                      self.palette.RGB[other_pixel_4bit]], dtype=np.uint8))
+            np.array([pixel_4bit_0, pixel_4bit_1], dtype=np.uint8),
+            np.array([self.palette.RGB[pixel_4bit_0],
+                      self.palette.RGB[pixel_4bit_1]], dtype=np.uint8))

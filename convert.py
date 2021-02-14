@@ -27,39 +27,57 @@ def main():
     parser.add_argument(
         "--lookahead", type=int, default=6,
         help=("How many pixels to look ahead to compensate for NTSC colour "
-              "artifacts."))
+              "artifacts.  Default: 6"))
     parser.add_argument(
         '--dither', type=str, choices=list(dither_pattern.PATTERNS.keys()),
         default=dither_pattern.DEFAULT_PATTERN,
-        help="Error distribution pattern to apply when dithering.")
+        help="Error distribution pattern to apply when dithering.  Default: "
+             + dither_pattern.DEFAULT_PATTERN)
     parser.add_argument(
         '--show_input', action=argparse.BooleanOptionalAction, default=False,
-        help="Whether to show the input image before conversion.")
+        help="Whether to show the input image before conversion.  Default: "
+             "False")
     parser.add_argument(
         '--show_output', action=argparse.BooleanOptionalAction, default=True,
-        help="Whether to show the output image after conversion.")
+        help="Default: True.  Whether to show the output image after "
+             "conversion.  Default: True")
     parser.add_argument(
-        '--resolution', type=int, choices=(560, 140), default=560,
-        help=("Double hi-res resolution to target.  140 treats pixels in "
-              "groups of 4, with 16 colours that can be chosen independently, "
-              "and ignores NTSC fringing.  560 treats each pixel individually, "
-              "with choice of 2 colours (depending on NTSC colour phase), "
-              "and looking ahead over next --lookahead pixels to optimize the "
-              "colour sequence.")
+        '--resolution', type=str, choices=("140", "560", "ntsc"), default="560",
+        help=("Effective double hi-res resolution to target.  '140' treats "
+              "pixels in groups of 4, with 16 colours that are chosen "
+              "independently, and ignores NTSC fringing.  This is mostly only "
+              "useful for comparison to other 140px converters.  '560' treats "
+              "each pixel individually, with choice of 2 colours (depending on "
+              "NTSC colour phase), and looking ahead over next --lookahead "
+              "pixels to optimize the colour sequence.  'ntsc' additionally "
+              "simulates the reduced bandwidth of the NTSC chroma signal, and "
+              "causes colours to bleed over 8 successive pixels instead of 4.  "
+              "Default: 560")
     )
     parser.add_argument(
-        '--palette', type=str, choices=list(palette_py.PALETTES.keys()),
+        '--palette', type=str, choices=list(
+            set(palette_py.PALETTES.keys()) - {"ntsc"}),
         default=palette_py.DEFAULT_PALETTE,
-        help="RGB colour palette to dither to.")
+        help="RGB colour palette to dither to.  Ignored for "
+             "--resolution=ntsc.  Default: " + palette_py.DEFAULT_PALETTE)
+    parser.add_argument(
+        '--show_palette', type=str, choices=list(palette_py.PALETTES.keys()),
+        help="RGB colour palette to use when --show_output.  Default: "
+             "value of --palette.")
     args = parser.parse_args()
 
-    palette = palette_py.PALETTES[args.palette]()
-    if args.resolution == 560:
-        screen = screen_py.DHGR560Screen(palette)
+    if args.resolution == "ntsc":
+        palette = palette_py.PALETTES["ntsc"]()
+        screen = screen_py.DHGR560NTSCScreen(palette)
         lookahead = args.lookahead
     else:
-        screen = screen_py.DHGR140Screen(palette)
-        lookahead = 0
+        palette = palette_py.PALETTES[args.palette]()
+        if args.resolution == "560":
+            screen = screen_py.DHGR560Screen(palette)
+            lookahead = args.lookahead
+        else:
+            screen = screen_py.DHGR140Screen(palette)
+            lookahead = 0
 
     # Open and resize source image
     image = image_py.open(args.input)
@@ -69,39 +87,33 @@ def main():
                                        screen.Y_RES)).astype(np.float32)
 
     dither = dither_pattern.PATTERNS[args.dither]()
-
-    # start = time.time()
-    output_4bit, output_rgb = dither_pyx.dither_image(
+    output_4bit, _ = dither_pyx.dither_image(
         screen, resized, dither, lookahead)
-    # print(time.time() - start)
-
-    if args.resolution == 140:
-        # Show un-fringed 140px output image
-        out_image = Image.fromarray(image_py.linear_to_srgb(output_rgb).astype(
-            np.uint8))
-        if args.show_output:
-            image_py.resize(out_image, 560, 384, srgb_output=True).show()
-
     bitmap = screen.pack(output_4bit)
-    output_rgb = screen.bitmap_to_image_rgb(bitmap)
 
-    # Show output image
+    # Show output image by rendering in target palette
+    if args.show_palette:
+        output_palette = palette_py.PALETTES[args.show_palette]()
+    else:
+        output_palette = palette
+    if args.show_palette == 'ntsc':
+        output_screen = screen_py.DHGR560NTSCScreen(output_palette)
+    else:
+        output_screen = screen_py.DHGR560Screen(output_palette)
+    output_rgb = output_screen.bitmap_to_image_rgb(bitmap)
     out_image = Image.fromarray(image_py.linear_to_srgb(output_rgb).astype(
         np.uint8))
     out_image = image_py.resize(out_image, 560, 384, srgb_output=True)
+
     if args.show_output:
         out_image.show()
-
-    ntsc = Image.fromarray(screen.bitmap_to_ntsc(bitmap))
-    ntsc = image_py.resize(ntsc, 560 * 3 // 2, 384 * 3 // 2, srgb_output=True)
-    ntsc.show()
 
     # Save Double hi-res image
     outfile = os.path.join(os.path.splitext(args.output)[0] + "-preview.png")
     out_image.save(outfile, "PNG")
     with open(args.output, "wb") as f:
-        f.write(bytes(screen.main))
         f.write(bytes(screen.aux))
+        f.write(bytes(screen.main))
 
 
 if __name__ == "__main__":

@@ -181,8 +181,8 @@ cdef apply(Dither* dither, screen, int x, int y, Image* image, float[] quant_err
 
 @cython.boundscheck(False)
 @cython.wraparound(False)
-def find_nearest_colour(screen, float[::1] pixel_rgb, unsigned char[::1] options_4bit, unsigned char[:, ::1] options_rgb):
-    cdef int best, dist
+cdef find_nearest_colour(screen, float[3] pixel_rgb, unsigned char[::1] options_4bit, unsigned char[:, ::1] options_rgb):
+    cdef int best, dist, i
     cdef unsigned char bit4
     cdef int best_dist = 2**8
     cdef long flat
