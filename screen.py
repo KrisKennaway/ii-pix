@@ -3,6 +3,7 @@
 import numpy as np
 import palette as palette_py
 
+
 # TODO: rename "4bit" variable naming now that we also have palettes with 8 bit
 #  depth.
 
@@ -83,77 +84,71 @@ class Screen:
         raise NotImplementedError
 
     @staticmethod
-    def _sin(pos, phase0=4):
+    def _sin(pos, phase0=0):
         x = pos % 12 + phase0
-        return 8 * np.sin(x * 2 * np.pi / 12)
+        return np.sin(x * 2 * np.pi / 12)
 
     @staticmethod
-    def _cos(pos, phase0=4):
+    def _cos(pos, phase0=0):
         x = pos % 12 + phase0
-        return 8 * np.cos(x * 2 * np.pi / 12)
+        return np.cos(x * 2 * np.pi / 12)
 
     def _read(self, line, pos):
         if pos < 0:
             return 0
 
-        # Sather says black level is 0.36V and white level 1.1V, but this
-        # doesn't seem to be right (they correspond to values -29 and +33)
-        # which means that 0101 grey has Y value ~0, i.e. is black.  These are
-        # only mentioned as labels on figure 8.2 though.
-        #
-        # _The Apple II Circuit description_ by W. Gayler gives black=0.5V
-        # and white=2.0V which is much more plausible.
-        #
-        # Conversion is given by floor((voltage-0.518)*1000/12)-15
-        return 108 if line[pos] else 0  # -16
+        return 1 if line[pos] else 0
 
     def bitmap_to_ntsc(self, bitmap: np.ndarray) -> np.ndarray:
-        """
-        See http://forums.nesdev.com/viewtopic.php?p=172329#p172329
-        """
         y_width = 12
-        i_width = 24
-        q_width = 24
+        u_width = 24
+        v_width = 24
 
-        contrast = 167941
-        saturation = 144044
+        contrast = 1
+        # TODO: where does this come from?  OpenEmulator looks like it should
+        #  use a value of 1.0 by default.
+        saturation = 2
+        # Fudge factor to make colours line up with OpenEmulator
+        # TODO: where does this come from - is it due to the band-pass
+        #  filtering they do?
+        hue = -0.3
 
-        yr = contrast / y_width
-        ir = contrast * 1.994681e-6 * saturation / i_width
-        qr = contrast * 9.915742e-7 * saturation / q_width
-
-        yg = contrast / y_width
-        ig = contrast * 9.151351e-8 * saturation / i_width
-        qg = contrast * -6.334805e-7 * saturation / q_width
-
-        yb = contrast / y_width
-        ib = contrast * -1.012984e-6 * saturation / i_width
-        qb = contrast * 1.667217e-6 * saturation / q_width
+        # Apply effect of saturation
+        yuv_to_rgb = np.array(
+            ((1, 0, 0), (0, saturation, 0), (0, 0, saturation)), dtype=np.float)
+        # Apply hue phase rotation
+        yuv_to_rgb = np.matmul(np.array(
+            ((1, 0, 0), (0, np.cos(hue), np.sin(hue)), (0, -np.sin(hue),
+                                                        np.cos(hue)))),
+            yuv_to_rgb)
+        # Y'UV to R'G'B' conversion
+        yuv_to_rgb = np.matmul(np.array(
+            ((1, 0, 1.13983), (1, -0.39465, -.58060), (1, 2.03211, 0))),
+            yuv_to_rgb)
+        # Apply effect of contrast
+        yuv_to_rgb *= contrast
 
         out_rgb = np.empty((bitmap.shape[0], bitmap.shape[1] * 3, 3),
                            dtype=np.uint8)
         for y in range(bitmap.shape[0]):
             ysum = 0
-            isum = 0
-            qsum = 0
+            usum = 0
+            vsum = 0
             line = np.repeat(bitmap[y], 3)
 
-            # color = y // (192//16)
-            # line = np.repeat(np.tile((color & 1, color & 2, color & 4,
-            #                          color & 8), 140), 3)
             for x in range(bitmap.shape[1] * 3):
                 ysum += self._read(line, x) - self._read(line, x - y_width)
-                isum += self._read(line, x) * self._cos(x) - self._read(
-                    line, x - i_width) * self._cos((x - i_width))
-                qsum += self._read(line, x) * self._sin(x) - self._read(
-                    line, x - q_width) * self._sin((x - q_width))
-
-                r = min(255, max(0, ysum * yr + isum * ir + qsum * qr) /
-                        65536)
-                g = min(255,
-                        max(0, (ysum * yg + isum * ig + qsum * qg) / 65536))
-                b = min(255,
-                        max(0, (ysum * yb + isum * ib + qsum * qb) / 65536))
+                usum += self._read(line, x) * self._sin(x) - self._read(
+                    line, x - u_width) * self._sin((x - u_width))
+                vsum += self._read(line, x) * self._cos(x) - self._read(
+                    line, x - v_width) * self._cos((x - v_width))
+                rgb = np.matmul(
+                    yuv_to_rgb, np.array(
+                        (ysum / y_width, usum / u_width,
+                         vsum / v_width)).reshape((3, 1))).reshape(3)
+                r = min(255, max(0, rgb[0] * 255))
+                g = min(255, max(0, rgb[1] * 255))
+                b = min(255, max(0, rgb[2] * 255))
                 out_rgb[y, x, :] = (r, g, b)
 
         return out_rgb

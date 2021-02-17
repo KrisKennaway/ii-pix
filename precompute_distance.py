@@ -34,7 +34,7 @@ def all_lab_colours():
 
 
 def nearest_colours(palette, all_lab, diffs):
-    palette_size = len(palette)
+    palette_size = len(palette.RGB)
     palette_labs = np.empty((palette_size, 3), dtype=np.float)
     for i, palette_rgb in palette.RGB.items():
         palette_labs[i, :] = rgb_to_lab(palette_rgb)
@@ -78,7 +78,8 @@ def main():
         except FileExistsError:
             pass
         out = np.memmap(filename=palette.DISTANCES_PATH, mode="w+",
-                        dtype=np.uint8, shape=(RGB_LEVELS ** 3, len(palette)))
+                        dtype=np.uint8, shape=(RGB_LEVELS ** 3,
+                                               len(palette.RGB)))
         nearest_colours(palette, all_lab, out)
 
 
