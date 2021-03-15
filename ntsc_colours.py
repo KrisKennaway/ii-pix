@@ -7,7 +7,7 @@ import screen
 
 
 def main():
-    s = screen.DHGR560Screen(palette=None)
+    s = screen.DHGR560NTSCScreen(palette=None)
     bitmap = np.zeros((1, 8), dtype=np.bool)
 
     colours = {}

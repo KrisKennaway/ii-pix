@@ -41,6 +41,7 @@ class Palette:
 
 
 class ToHgrPalette(Palette):
+    """4-bit palette used as default by other DHGR image converters."""
     DISTANCES_PATH = "data/distances_tohgr.data"
     PALETTE_DEPTH = 4
 
@@ -66,6 +67,7 @@ class ToHgrPalette(Palette):
 
 
 class OpenEmulatorPalette(Palette):
+    """4-bit palette chosen to approximately match OpenEmulator output."""
     DISTANCES_PATH = "data/distances_openemulator.data"
     PALETTE_DEPTH = 4
 
@@ -91,6 +93,7 @@ class OpenEmulatorPalette(Palette):
 
 
 class VirtualIIPalette(Palette):
+    """4-bit palette exactly matching Virtual II emulator output."""
     DISTANCES_PATH = "data/distances_virtualii.data"
     PALETTE_DEPTH = 4
 
@@ -115,6 +118,7 @@ class VirtualIIPalette(Palette):
 
 
 class NTSCPalette(Palette):
+    """8-bit NTSC palette computed by averaging chroma signal over 8 pixels."""
     DISTANCES_PATH = 'data/distances_ntsc.data'
     PALETTE_DEPTH = 8
 
