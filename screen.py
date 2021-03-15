@@ -4,9 +4,6 @@ import numpy as np
 import palette as palette_py
 
 
-# TODO: rename "4bit" variable naming now that we also have palettes with 8 bit
-#  depth.
-
 class Screen:
     X_RES = None
     Y_RES = None
@@ -30,11 +27,10 @@ class Screen:
 
         return 1024 * c + 128 * b + 40 * a
 
-    def _image_to_bitmap(self, image: np.ndarray) -> np.ndarray:
-        """Converts 4-bit image to 2-bit image bitmap.
+    def _image_to_bitmap(self, image_nbit: np.ndarray) -> np.ndarray:
+        """Converts n-bit image to 2-bit image bitmap.
 
-        Each 4-bit colour value maps to a sliding window of 4 successive pixels,
-        via x%4.
+        Each n-bit colour value maps to a sliding window of n successive pixels.
         """
         raise NotImplementedError
 
@@ -83,8 +79,8 @@ class Screen:
                 image_rgb[y, x, :] = self.palette.RGB[dots]
         return image_rgb
 
-    def pixel_palette_options(self, last_pixel_4bit, x: int):
-        """Returns available colours for given x pos and 4-bit colour of x-1"""
+    def pixel_palette_options(self, last_pixel_nbit, x: int):
+        """Returns available colours for given x pos and n-bit colour of x-1"""
         raise NotImplementedError
 
     @staticmethod
@@ -111,18 +107,18 @@ class DHGR140Screen(Screen):
     Y_RES = 192
     X_PIXEL_WIDTH = 4
 
-    def _image_to_bitmap(self, image_4bit: np.ndarray) -> np.ndarray:
+    def _image_to_bitmap(self, image_nbit: np.ndarray) -> np.ndarray:
         bitmap = np.zeros(
             (self.Y_RES, self.X_RES * self.X_PIXEL_WIDTH), dtype=np.bool)
         for y in range(self.Y_RES):
             for x in range(self.X_RES):
-                pixel = image_4bit[y, x]
+                pixel = image_nbit[y, x]
                 dots = self.palette.DOTS[pixel]
                 bitmap[y, x * self.X_PIXEL_WIDTH:(
                         (x + 1) * self.X_PIXEL_WIDTH)] = dots
         return bitmap
 
-    def pixel_palette_options(self, last_pixel_4bit, x: int):
+    def pixel_palette_options(self, last_pixel_nbit, x: int):
         # All 16 colour choices are available at every x position.
         return (
             np.array(list(self.palette.RGB.keys()), dtype=np.uint8),
@@ -135,28 +131,28 @@ class DHGR560Screen(Screen):
     Y_RES = 192
     X_PIXEL_WIDTH = 1
 
-    def _image_to_bitmap(self, image_4bit: np.ndarray) -> np.ndarray:
+    def _image_to_bitmap(self, image_nbit: np.ndarray) -> np.ndarray:
         bitmap = np.zeros((self.Y_RES, self.X_RES), dtype=np.bool)
         for y in range(self.Y_RES):
             for x in range(self.X_RES):
-                pixel = image_4bit[y, x]
+                pixel = image_nbit[y, x]
                 dots = self.palette.DOTS[pixel]
                 phase = x % 4
                 bitmap[y, x] = dots[phase]
         return bitmap
 
-    def pixel_palette_options(self, last_pixel_4bit, x: int):
+    def pixel_palette_options(self, last_pixel_nbit, x: int):
         # The two available colours for position x are given by the 4-bit
         # value of position x-1, and the 4-bit value produced by toggling the
         # value of the x % 4 bit (the current value of NTSC phase)
-        last_dots = self.palette.DOTS[last_pixel_4bit]
+        last_dots = self.palette.DOTS[last_pixel_nbit]
         other_dots = list(last_dots)
         other_dots[x % 4] = not other_dots[x % 4]
         other_dots = tuple(other_dots)
-        other_pixel_4bit = self.palette.DOTS_TO_INDEX[other_dots]
-        return (np.array([last_pixel_4bit, other_pixel_4bit], dtype=np.uint8),
-                np.array([self.palette.RGB[last_pixel_4bit],
-                          self.palette.RGB[other_pixel_4bit]], dtype=np.uint8))
+        other_pixel_nbit = self.palette.DOTS_TO_INDEX[other_dots]
+        return (np.array([last_pixel_nbit, other_pixel_nbit], dtype=np.uint8),
+                np.array([self.palette.RGB[last_pixel_nbit],
+                          self.palette.RGB[other_pixel_nbit]], dtype=np.uint8))
 
 
 # TODO: refactor to share implementation with DHGR560Screen
@@ -166,11 +162,11 @@ class DHGR560NTSCScreen(Screen):
     Y_RES = 192
     X_PIXEL_WIDTH = 1
 
-    def _image_to_bitmap(self, image_4bit: np.ndarray) -> np.ndarray:
+    def _image_to_bitmap(self, image_nbit: np.ndarray) -> np.ndarray:
         bitmap = np.zeros((self.Y_RES, self.X_RES), dtype=np.bool)
         for y in range(self.Y_RES):
             for x in range(self.X_RES):
-                pixel = image_4bit[y, x]
+                pixel = image_nbit[y, x]
                 dots = self.palette.DOTS[pixel]
                 phase = x % 4
                 bitmap[y, x] = dots[4 + phase]
@@ -193,23 +189,23 @@ class DHGR560NTSCScreen(Screen):
                 image_rgb[y, x, :] = self.palette.RGB[dots]
         return image_rgb
 
-    def pixel_palette_options(self, last_pixel_4bit, x: int):
+    def pixel_palette_options(self, last_pixel_nbit, x: int):
         # The two available 8-bit pixel colour choices are given by:
         # - Rotating the pixel value from the current x % 4 + 4 position to
         #   x % 4
         # - choosing 0 and 1 for the new values of x % 4 + 4
-        next_dots0 = list(self.palette.DOTS[last_pixel_4bit])
+        next_dots0 = list(self.palette.DOTS[last_pixel_nbit])
         next_dots1 = list(next_dots0)
         next_dots0[x % 4] = next_dots0[x % 4 + 4]
         next_dots0[x % 4 + 4] = False
         next_dots1[x % 4] = next_dots1[x % 4 + 4]
         next_dots1[x % 4 + 4] = True
-        pixel_4bit_0 = self.palette.DOTS_TO_INDEX[tuple(next_dots0)]
-        pixel_4bit_1 = self.palette.DOTS_TO_INDEX[tuple(next_dots1)]
+        pixel_nbit_0 = self.palette.DOTS_TO_INDEX[tuple(next_dots0)]
+        pixel_nbit_1 = self.palette.DOTS_TO_INDEX[tuple(next_dots1)]
         return (
-            np.array([pixel_4bit_0, pixel_4bit_1], dtype=np.uint8),
-            np.array([self.palette.RGB[pixel_4bit_0],
-                      self.palette.RGB[pixel_4bit_1]], dtype=np.uint8))
+            np.array([pixel_nbit_0, pixel_nbit_1], dtype=np.uint8),
+            np.array([self.palette.RGB[pixel_nbit_0],
+                      self.palette.RGB[pixel_nbit_1]], dtype=np.uint8))
 
     def bitmap_to_ntsc(self, bitmap: np.ndarray) -> np.ndarray:
         y_width = 12
