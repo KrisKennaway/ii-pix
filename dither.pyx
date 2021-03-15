@@ -201,7 +201,7 @@ cdef find_nearest_colour(screen, float[3] pixel_rgb, unsigned char[::1] options_
 
 @cython.boundscheck(False)
 @cython.wraparound(False)
-def dither_image(screen, float[:, :, ::1] image_rgb, dither, int lookahead):
+def dither_image(screen, float[:, :, ::1] image_rgb, dither, int lookahead, unsigned char verbose):
     cdef (unsigned char)[:, ::1] image_nbit = np.empty(
         (image_rgb.shape[0], image_rgb.shape[1]), dtype=np.uint8)
 
@@ -240,6 +240,8 @@ def dither_image(screen, float[:, :, ::1] image_rgb, dither, int lookahead):
             cdither.pattern[i * cdither.x_shape + j] = dither.PATTERN[i, j, 0]
 
     for y in range(yres):
+        if verbose:
+            print("%d/%d" % (y, yres))
         output_pixel_nbit = 0
         for x in range(xres):
             for i in range(3):

@@ -61,6 +61,9 @@ def main():
         '--show_palette', type=str, choices=list(palette_py.PALETTES.keys()),
         help="RGB colour palette to use when --show_output (default: "
              "value of --palette)")
+    parser.add_argument(
+        '--verbose', action=argparse.BooleanOptionalAction,
+        default=False, help="Show progress during conversion")
     args = parser.parse_args()
 
     palette = palette_py.PALETTES[args.palette]()
@@ -88,7 +91,7 @@ def main():
 
     dither = dither_pattern.PATTERNS[args.dither]()
     output_nbit, _ = dither_pyx.dither_image(
-        screen, resized, dither, lookahead)
+        screen, resized, dither, lookahead, args.verbose)
     bitmap = screen.pack(output_nbit)
 
     # Show output image by rendering in target palette
