@@ -34,10 +34,10 @@ def main():
         help="Error distribution pattern to apply when dithering (default: "
              + dither_pattern.DEFAULT_PATTERN + ")")
     parser.add_argument(
-        '--show_input', action=argparse.BooleanOptionalAction, default=False,
+        '--show-input', action=argparse.BooleanOptionalAction, default=False,
         help="Whether to show the input image before conversion.")
     parser.add_argument(
-        '--show_output', action=argparse.BooleanOptionalAction, default=True,
+        '--show-output', action=argparse.BooleanOptionalAction, default=True,
         help="Whether to show the output image after conversion.")
     parser.add_argument(
         '--resolution', type=str, choices=("140", "560"), default="560",
@@ -58,7 +58,7 @@ def main():
              'palettes determine colours based on 4 pixel sequences '
              '(default: ' + palette_py.DEFAULT_PALETTE + ")")
     parser.add_argument(
-        '--show_palette', type=str, choices=list(palette_py.PALETTES.keys()),
+        '--show-palette', type=str, choices=list(palette_py.PALETTES.keys()),
         help="RGB colour palette to use when --show_output (default: "
              "value of --palette)")
     parser.add_argument(
