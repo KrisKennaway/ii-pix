@@ -66,7 +66,7 @@ Some difference in colour tone is visible due to blending of colours across pixe
 
 ][-pix also allows modeling this NTSC signal behaviour, which effectively allows access to more than 16 DHGR colours, through carefully chosen sequences of pixels (see below for more details).  The resulting images have much higher quality, but only when viewed on a suitable target (e.g. OpenEmulator, or real hardware).  On other targets the colour balance tends to be skewed, though image detail is still good.
 
-This is an OpenEmulator screenshot of the same image converted with `--resolution=ntsc` instead of `--resolution=560`.  Colour match to the original is substantially improved, and more colour detail is visible, e.g. in the shading of the background.
+This is an OpenEmulator screenshot of the same image converted with `--palette=ntsc` instead of `--palette=openemulator`.  Colour match to the original is substantially improved, and more colour detail is visible, e.g. in the shading of the background.
 
 ![Two colourful parrots sitting on a branch](examples/parrots-iipix-ntsc-openemulator.png)
 
@@ -118,7 +118,7 @@ By simulating the NTSC (Y'UV) signal directly we are able to recover the Apple I
 
 However in real NTSC, chroma bleeds over more than 4 pixels, which means that we actually have more than 2^4 colours available to work with.
 
-**When viewed on a composite colour display, Double Hi-Res graphics is not just a 16-colour graphics mode!**
+This means that **when viewed on a composite colour display, Double Hi-Res graphics is not just a 16-colour graphics mode!**
 
 If we allow the NTSC chroma signal to bleed over 8 pixels instead of 4, then the resulting colour is determined by sequences of 8 pixels instead of 4 pixels, i.e. there are 2^8 = 256 possibilities.  In practise many of these result in the same output colour, and (with this approximation) there are only 85 unique colours available.  However this is still a marked improvement on the 16 "basic" DHGR colours:
 
@@ -140,21 +140,21 @@ By contrast, OpenEmulator uses a more complex (and realistic) band-pass filterin
 
 ![Nymphaea](examples/nymphaea-original.png)
 
-OpenEmulator screenshot of image produced with `--resolution=560 --palette=openemulator --lookahead=8`.  The distorted background colour compared to the original is particularly noticeable.
+OpenEmulator screenshot of image produced with `--palette=openemulator --lookahead=8`.  The distorted background colour compared to the original is particularly noticeable.
 
 ![Nymphaea](examples/nymphaea-iipix-openemulator-openemulator.png)
 
-OpenEmulator screenshot of image produced with `--resolution=ntsc --lookahead=8`.  Not only is the background colour a much better match, the image shading and detail is markedly improved.
+OpenEmulator screenshot of image produced with `--palette=ntsc --lookahead=8`.  Not only is the background colour a much better match, the image shading and detail is markedly improved.
 
 ![Nymphaea](examples/nymphaea-iipix-ntsc-openemulator.png)
 
-Rendering the same .dhr image with 4-pixel colour shows the reason for the difference.  For example the background shading is due to pixel sequences that with this simpler (and less hardware-accurate) rendering scheme appear as sequences of grey and dark green, with a lot of blue and red sprinkled in.  With NTSC these pixel sequences combine to produce various shades of green.  Note also that the dark green (1 pixel set; low luma) is brightened by the grey (2 pixels set; medium luma) to produce a green of medium intensity.
+Rendering the same .dhr image with 4-pixel colour shows the reason for the difference.  For example the background shading is due to pixel sequences that appear (with this simpler and less hardware-accurate rendering scheme) as sequences of grey and dark green, with a lot of blue and red sprinkled in.  In NTSC these pixel sequences combine to produce various shades of green.
 
-![Nymphaea](examples/nymphaea-iipix-ntsc-tohgr.png)
+![Nymphaea](examples/nymphaea-iipix-ntsc-preview-openemulator.png)
 
 # Dithering and Double Hi-Res
 
-Dithering an image to produce an approximation with fewer image colours is a well-known technique.  The basic idea is to pick a "best colour match" for a pixel from our limited palette, then to compute the difference between the true and selected colour values and diffuse this error to nearby pixels (using some pattern).
+[Dithering](https://en.wikipedia.org/wiki/Dither) an image to produce an approximation with fewer image colours is a well-known technique.  The basic idea is to pick a "best colour match" for a pixel from our limited palette, then to compute the difference between the true and selected colour values and diffuse this error to nearby pixels (using some pattern).
 
 In the particular case of DHGR this algorithm runs into difficulties, because each pixel only has two possible colour choices (from a total of 16+).  If we only consider the two possibilities for the immediate next pixel then neither may be a particularly good match.  However it may be more beneficial to make a suboptimal choice now (deliberately introduce more error), if it allows us access to a better colour for a subsequent pixel.  "Classical" dithering algorithms do not account for these palette constraints, and produce suboptimal image quality for DHGR conversions. 
 
@@ -189,11 +189,11 @@ Since the Apple II graphics (prior to //gs) are not based on RGB colour, we have
 1.  Different emulators have made (often quite different) choices for the RGB colour palettes used to emulate Apple II graphics on a RGB display.  This means that an image that looks good on one emulator may not look good on another (or on real hardware).
     - For example, Virtual II (and the Apple //gs) uses two different RGB shades of grey for the two DHGR grey colours, whereas they are rendered identically in NTSC.  That means that images not targeted for the Virtual II palette will look quite different when viewed there (and vice versa).
 
-2.  Secondly, the actual display colours rendered by an Apple II are not fixed, but bleed into each other due to the behaviour of the (analogue) NTSC video signal.  i.e. the entire notion of a "16-colour RGB palette" is a flawed one.  Furthermore, the NTSC colours depend on the particular monitor/TV and its tuning (brightness/contrast/hue settings etc).  "Never Twice the Same Colour" indeed.   The model described above where we can assign from 16 fixed colours to each of 560 discrete pixels is only an approximation (though a useful one in practise).
+2.  Secondly, the actual display colours rendered by an Apple II are not fixed, but bleed into each other due to the behaviour of the (analogue) NTSC video signal.  i.e. the entire notion of a "16-colour RGB palette" is a flawed one.  Furthermore, the NTSC colours depend on the particular monitor/TV and its tuning (brightness/contrast/hue settings etc).  "Never Twice the Same Colour" indeed.   The "4-pixel colour" model described above where we can assign 2 from 16 fixed colours to each of 560 discrete pixels is only an approximation (though a useful one in practise).
 
 Some emulators emulate the NTSC video signal more faithfully (e.g. OpenEmulator), in which case they do not have a true "RGB palette".  The best we can do here is measure the colours that are produced by large blocks of colour, i.e. where there is no colour blending.  Others use some discrete approximation (e.g. Virtual II seems to exactly match the colour model described above), so a fixed palette can be reconstructed.
 
-To compute the emulator palettes used by ][-pix I measured the sRGB colour values produced by a full-screen Apple II colour image (using the colour picker tool of Mac OS X), using default emulator settings.  I have not yet attempted to measure/estimate palettes of other emulators, or "real hardware" (I don't actually have a composite colour monitor!)
+To compute the emulator palettes used by ][-pix I measured the sRGB colour values produced by a full-screen Apple II colour image (using the colour picker tool of Mac OS X), using default emulator settings.  I have not yet attempted to measure/estimate palettes of other emulators, or "real hardware"
 
 Existing conversion tools (see below) tend to support a variety of RGB palette values sourced from various places (older tools, emulators, theoretical estimations etc).  In practise, these only matter in a few ways:
 
@@ -205,7 +205,7 @@ Existing conversion tools (see below) tend to support a variety of RGB palette v
 
 ## Precomputing distance matrix
 
-Computing the CIE2000 distance between two RGB colour values is fairly expensive, since the [formula](https://en.wikipedia.org/wiki/Color_difference#CIEDE2000) is complex. We deal with this by precomputing a matrix from all 256^3 integer RGB values to the 16 RGB values in a palette. This matrix is generated on disk by the `precompute_distance.py` utility, and is mmapped at runtime for efficient access.
+Computing the CIE2000 distance between two RGB colour values is fairly expensive, since the [formula](https://en.wikipedia.org/wiki/Color_difference#CIEDE2000) is complex. We deal with this by precomputing a matrix from all 256^3 integer RGB values to all RGB values in the target palette. This matrix is generated on disk by the `precompute_distance.py` utility, and is mmapped at runtime for efficient access.
 
 For a 4-bit colour palette the file is 256MB; for the 8-bit NTSC colour palette it is 4GB!  Image dithering is also correspondingly slower (especially if the file cannot be mmapped completely into memory and must be demand-paged).
 

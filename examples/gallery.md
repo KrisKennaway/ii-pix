@@ -102,10 +102,10 @@ Here are some more images converted with ][-pix.
 
  (Source: [Shreygadgil](https://commons.wikimedia.org/wiki/File:Vibrant_Wings.jpg), [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0), via Wikimedia Commons)
 
-![Parrots - original](parrots-original.png)
-![Parrots - Virtual II](parrots-iipix-virtualii-preview.png)
+![Groundhog - original](groundhog-original.png)
+![Groundhog - Virtual II](groundhog-iipix-virtualii-preview.png)
 
-![Parrots - OpenEmulator 8-pixel](parrots-iipix-ntsc-openemulator.png)
-![Parrots - OpenEmulator 4-pixel](parrots-iipix-openemulator-openemulator.png)
+![Groundhog - OpenEmulator 8-pixel](groundhog-iipix-ntsc-openemulator.png)
+![Groundhog - OpenEmulator 4-pixel](groundhog-iipix-openemulator-openemulator.png)
 
 (Source: [Cephas](https://commons.wikimedia.org/wiki/File:Marmota_monax_UL_04.jpg), [CC BY-SA 3.0](https://creativecommons.org/licenses/by-sa/3.0), via Wikimedia Commons)
