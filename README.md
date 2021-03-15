@@ -248,9 +248,9 @@ For a 4-bit colour palette the file is 256MB; for the 8-bit NTSC colour palette 
 ![Detail of a2bestpix preview image](docs/a2bestbix-preview-crop.png)
 ![Detail of openemulator render](docs/a2bestpix-openemulator-crop.png)
 
-*  Other discrepancies are also visible when comparing these two images.  This means that (like bmp2dhr) the generated "preview" image may not closely match the native image, and the dithering algorithm is also optimizing over a slightly incorrect set of colour sequences, which presumably impacts image quality.  Possibly these are transcription errors, or artifacts of the particular emulator (AppleWin) from which they were reconstructed.
-
 *  See below for another example where the output has major image discrepancies with the original - perhaps also due to bugs/omissions in the table of colour blocks.
+
+*  This means that (like bmp2dhr) the generated "preview" image may not closely match the native image, and the dithering algorithm is also optimizing over a slightly incorrect set of colour sequences, which presumably impacts image quality.  Possibly these are transcription errors, or artifacts of the particular emulator (AppleWin) from which they were reconstructed.
 
 ## Image comparisons
 
@@ -261,7 +261,7 @@ These three images were converted using the same target (openemulator) palette, 
 
 (Source: [Purple Sherbet Photography from Worldwide!](https://commons.wikimedia.org/wiki/File:Colourful_assortment_of_paper_clips_(10421946796).jpg), [CC BY 2.0](https://creativecommons.org/licenses/by/2.0), via Wikimedia Commons)
 
-The following images were generated with a palette approximating OpenEmulator's colours (`--palette=openemulator` for ][-pix)
+The following images were all generated with a palette approximating OpenEmulator's colours (`--palette=openemulator` for ][-pix)
 
 ### ][-pix 4-pixel colour
 
