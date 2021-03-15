@@ -52,7 +52,7 @@ This image was generated using
 python convert.py --lookahead 8 --palette openemulator examples/parrots-original.png examples/parrots-iipix-openemulator.dhr
 ```
 
-The resulting ][-pix preview PNG image is shown here.  The Virtual II emulator renders the double hi-res image identically to this generated preview image, when using `--palette=virtualii` (not shown here)
+The resulting ][-pix preview PNG image is shown here.
 
 ![Two colourful parrots sitting on a branch](examples/parrots-iipix-openemulator-preview.png)
 
@@ -60,7 +60,7 @@ The resulting ][-pix preview PNG image is shown here.  The Virtual II emulator r
 
 This is a screenshot taken from OpenEmulator when viewing the Double Hi-res image.
 
-![Two colourful parrots sitting on a branch](examples/parrots-iipix-openemulator.png)
+![Two colourful parrots sitting on a branch](examples/parrots-iipix-openemulator-openemulator.png)
 
 Some difference in colour tone is visible due to blending of colours across pixels (e.g. brown blending into grey, in the background).  This is due to the fact that OpenEmulator simulates the reduced chroma bandwidth of the NTSC signal.
 
@@ -142,7 +142,7 @@ By contrast, OpenEmulator uses a more complex (and realistic) band-pass filterin
 
 OpenEmulator screenshot of image produced with `--resolution=560 --palette=openemulator --lookahead=8`.  The distorted background colour compared to the original is particularly noticeable.
 
-![Nymphaea](examples/nymphaea-iipix-openemulator.png)
+![Nymphaea](examples/nymphaea-iipix-openemulator-openemulator.png)
 
 OpenEmulator screenshot of image produced with `--resolution=ntsc --lookahead=8`.  Not only is the background colour a much better match, the image shading and detail is markedly improved.
 
@@ -268,7 +268,7 @@ The following images were generated with a palette approximating OpenEmulator's 
 Preview image and OpenEmulator screenshot
 
 ![ii-pix preview](examples/paperclips-iipix-openemulator-preview.png)
-![ii-pix screenshot](examples/paperclips-iipix-openemulator.png)
+![ii-pix screenshot](examples/paperclips-iipix-openemulator-openemulator.png)
 
 ### ][-pix NTSC 8-pixel colour (Preview image)
 
@@ -319,17 +319,16 @@ The image is heavily impacted by colour fringing, which bmp2dhr does not account
 
 ### bmp2dhr (OpenEmulator)
 
-These next two images were generated with a palette approximating OpenEmulator's colours (`--palette=openemulator` for ][-pix), i.e. not the same image files as above.
-
 ![original source image](examples/groundhog-original.png)
 ![ii-pix screenshot](examples/groundhog-bmp2dhr-openemulator.png)
 
+This bmp2dhr image was generated using a palette approximating OpenEmulator's colours (`--palette=openemulator` for ][-pix), i.e. not the same image files as above.
 On OpenEmulator, which simulates NTSC chroma sub-sampling, the fringing is not pronounced but changes the colour balance of the image, e.g. creates a greenish tinge.
 
 ### ][-pix, 4-pixel colour (OpenEmulator)
 
 ![original source image](examples/groundhog-original.png)
-![ii-pix screenshot](examples/groundhog-iipix-openemulator.png)
+![ii-pix screenshot](examples/groundhog-iipix-openemulator-openemulator.png)
 
 Colour balance here is also slightly distorted due to not fully accounting for chroma blending.
 
