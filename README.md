@@ -162,7 +162,7 @@ Rendering the same .dhr image with 4-pixel colour shows the reason for the diffe
 
 In the particular case of DHGR this algorithm runs into difficulties, because each pixel only has two possible colour choices (from a total of 16+).  If we only consider the two possibilities for the immediate next pixel then neither may be a particularly good match.  However it may be more beneficial to make a suboptimal choice now (deliberately introduce more error), if it allows us access to a better colour for a subsequent pixel.  "Classical" dithering algorithms do not account for these palette constraints, and produce suboptimal image quality for DHGR conversions. 
 
-We can deal with this by looking ahead N pixels (6 by default) for each image position (x,y), and computing the effect of choosing all 2^N combinations of these N-pixel states on the dithered source image.
+We can deal with this by looking ahead N pixels (8 by default) for each image position (x,y), and computing the effect of choosing all 2^N combinations of these N-pixel states on the dithered source image.
 
 Specifically, for a fixed choice of one of these N pixel sequences, we tentatively perform the error diffusion as normal on a copy of the image, and compute the total mean squared distance from the (fixed) N-pixel sequence to the error-diffused source image.  For the perceptual colour distance metric we use [CIE2000 delta-E](https://en.wikipedia.org/wiki/Color_difference#CIEDE2000).
 

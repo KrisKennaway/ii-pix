@@ -25,9 +25,9 @@ def main():
     parser.add_argument("output", type=str, help="Output file for converted "
                                                  "Apple II image.")
     parser.add_argument(
-        "--lookahead", type=int, default=6,
+        "--lookahead", type=int, default=8,
         help=("How many pixels to look ahead to compensate for NTSC colour "
-              "artifacts (default: 6)"))
+              "artifacts (default: 8)"))
     parser.add_argument(
         '--dither', type=str, choices=list(dither_pattern.PATTERNS.keys()),
         default=dither_pattern.DEFAULT_PATTERN,
