@@ -20,6 +20,8 @@ python setup.py build_ext --inplace
 python precompute_distance.py --all  # or --palette <palette>
 ```
 
+NOTE: Building all distance matrices requires 4.75GB of free disk space!
+
 ## Usage
 
 Then, to convert an image, the simplest usage is:
@@ -28,7 +30,9 @@ Then, to convert an image, the simplest usage is:
 python convert.py <input> <output.dhr>
 ```
 
-By default preview image will be shown after conversion, and saved as `<output>-preview.png`, and `<output.dhr>` contains the double-hires image data in a form suitable for transfer to an Apple II disk image.  The 16k output consists of 8k AUX data first, 8K MAIN data second (this matches the output format of other DHGR image converters).  i.e. if loaded at 0x2000, the contents of 0x2000..0x3fff should be moved to 0x4000..0x5fff in AUX memory, and the image can be viewed on DHGR page 2.
+`<output.dhr>` contains the double-hires image data in a form suitable for transfer to an Apple II disk image.  The 16k output consists of 8k AUX data first, 8K MAIN data second (this matches the output format of other DHGR image converters).  i.e. if loaded at 0x2000, the contents of 0x2000..0x3fff should be moved to 0x4000..0x5fff in AUX memory, and the image can be viewed on DHGR page 2.
+
+By default, a preview image will be shown after conversion, and saved as `<output>-preview.png`
 
 For other available options, use `python convert.py --help`
 
