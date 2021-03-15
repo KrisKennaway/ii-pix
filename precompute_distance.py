@@ -35,7 +35,7 @@ def all_lab_colours():
 
 def nearest_colours(palette, all_lab, diffs):
     palette_size = len(palette.RGB)
-    palette_labs = np.empty((palette_size, 3), dtype=np.float)
+    palette_labs = np.empty((palette_size, 3), dtype=np.float32)
     for i, palette_rgb in palette.RGB.items():
         palette_labs[i, :] = rgb_to_lab(palette_rgb)
 
@@ -59,7 +59,8 @@ def main():
         palette_py.PALETTES.keys()),
                         default=palette_py.DEFAULT_PALETTE,
                         help="Palette for which to compute distance matrix.")
-    parser.add_argument('--all', type=bool, default=False,
+    parser.add_argument('--all', action=argparse.BooleanOptionalAction,
+                        default=False,
                         help="Whether to compute distances for all palettes")
     args = parser.parse_args()
 
