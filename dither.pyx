@@ -130,12 +130,12 @@ cdef int dither_lookahead(Dither* dither, float[:, ::1] palette_rgb,
 cdef void apply_one_line(Dither* dither, int xl, int xr, int x, float[] image, int image_shape1,
         float[] quant_error) nogil:
     cdef int i, j
-    cdef float error
+    cdef float error_fraction
 
     for i in range(xl, xr):
+        error_fraction = dither.pattern[i - x + dither.x_origin]
         for j in range(3):
-            error = dither.pattern[i - x + dither.x_origin] * quant_error[j]
-            image[i * image_shape1 + j] = clip(image[i * image_shape1 + j] + error, 0, 255)
+            image[i * image_shape1 + j] = clip(image[i * image_shape1 + j] + error_fraction * quant_error[j], 0, 255)
 
 
 @cython.boundscheck(False)
@@ -148,16 +148,16 @@ cdef void apply(Dither* dither, int x_res, int y_res, int x, int y, float[:,:,::
     cdef int xl = dither_bounds_xl(dither, x)
     cdef int xr = dither_bounds_xr(dither, x_res, x)
 
-    cdef float error
+    cdef float error_fraction
     # We could avoid clipping here, i.e. allow RGB values to extend beyond
     # 0..255 to capture a larger range of residual error.  This is faster
     # but seems to reduce image quality.
     # TODO: is this still true?
     for i in range(yt, yb):
         for j in range(xl, xr):
+            error_fraction = dither.pattern[(i - y) * dither.x_shape + j - x + dither.x_origin]
             for k in range(3):
-                error = dither.pattern[(i - y) * dither.x_shape + j - x + dither.x_origin] * quant_error[k]
-                image[i,j,k] = clip(image[i,j,k] + error, 0, 255)
+                image[i,j,k] = clip(image[i,j,k] + error_fraction * quant_error[k], 0, 255)
 
 
 @cython.boundscheck(False)
@@ -183,12 +183,6 @@ cdef unsigned char find_nearest_colour(float[::1] pixel_rgb, unsigned char[::1] 
 @cython.boundscheck(False)
 @cython.wraparound(False)
 def dither_image(screen, float[:, :, ::1] image_rgb, dither, int lookahead, unsigned char verbose):
-    cdef (unsigned char)[:, ::1] image_nbit = np.empty(
-        (image_rgb.shape[0], image_rgb.shape[1]), dtype=np.uint8)
-
-    cdef int yres = screen.Y_RES
-    cdef int xres = screen.X_RES
-
     cdef int y, x, i
     cdef float[3] input_pixel_rgb
     cdef float[3] quant_error
@@ -200,25 +194,31 @@ def dither_image(screen, float[:, :, ::1] image_rgb, dither, int lookahead, unsi
     cdef unsigned char output_pixel_nbit
     cdef float[::1] output_pixel_rgb
 
-    # Flatten python dither pattern array for more efficient access
-    # TODO: doesn't actually help?
-    cdef Dither cdither
-    cdither.y_shape = dither.PATTERN.shape[0]
-    cdither.x_shape = dither.PATTERN.shape[1]
-    cdither.y_origin = dither.ORIGIN[0]
-    cdither.x_origin = dither.ORIGIN[1]
-    # Convert dither.PATTERN to a malloced array which is faster to access
-    cdither.pattern = <float *> malloc(cdither.x_shape * cdither.y_shape * sizeof(float))
-    for i in range(cdither.y_shape):
-        for j in range(cdither.x_shape):
-            cdither.pattern[i * cdither.x_shape + j] = dither.PATTERN[i, j, 0]
+    # Hoist some python attribute accesses into C variables for efficient access during the main loop
 
-    cdef (unsigned char)[:, ::1] distances = screen.palette.distances
+    cdef int yres = screen.Y_RES
+    cdef int xres = screen.X_RES
 
     cdef float[:, ::1] palette_rgb = np.zeros((len(screen.palette.RGB), 3), dtype=np.float32)
     for i in screen.palette.RGB.keys():
         for j in range(3):
             palette_rgb[i, j] = screen.palette.RGB[i][j]
+
+    cdef (unsigned char)[:, ::1] distances = screen.palette.distances
+
+    cdef Dither cdither
+    cdither.y_shape = dither.PATTERN.shape[0]
+    cdither.x_shape = dither.PATTERN.shape[1]
+    cdither.y_origin = dither.ORIGIN[0]
+    cdither.x_origin = dither.ORIGIN[1]
+    # TODO: should be just as efficient to use a memoryview?
+    cdither.pattern = <float *> malloc(cdither.x_shape * cdither.y_shape * sizeof(float))
+    for i in range(cdither.y_shape):
+        for j in range(cdither.x_shape):
+            cdither.pattern[i * cdither.x_shape + j] = dither.PATTERN[i, j]
+
+    cdef (unsigned char)[:, ::1] image_nbit = np.empty(
+        (image_rgb.shape[0], image_rgb.shape[1]), dtype=np.uint8)
 
     for y in range(yres):
         if verbose:
