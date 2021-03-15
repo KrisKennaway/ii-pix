@@ -120,9 +120,7 @@ class DHGR140Screen(Screen):
 
     def pixel_palette_options(self, last_pixel_nbit, x: int):
         # All 16 colour choices are available at every x position.
-        return (
-            np.array(list(self.palette.RGB.keys()), dtype=np.uint8),
-            np.array(list(self.palette.RGB.values()), dtype=np.uint8))
+        return np.array(list(self.palette.RGB.keys()), dtype=np.uint8)
 
 
 class DHGR560Screen(Screen):
@@ -150,9 +148,7 @@ class DHGR560Screen(Screen):
         other_dots[x % 4] = not other_dots[x % 4]
         other_dots = tuple(other_dots)
         other_pixel_nbit = self.palette.DOTS_TO_INDEX[other_dots]
-        return (np.array([last_pixel_nbit, other_pixel_nbit], dtype=np.uint8),
-                np.array([self.palette.RGB[last_pixel_nbit],
-                          self.palette.RGB[other_pixel_nbit]], dtype=np.uint8))
+        return np.array([last_pixel_nbit, other_pixel_nbit], dtype=np.uint8)
 
 
 # TODO: refactor to share implementation with DHGR560Screen
@@ -202,10 +198,7 @@ class DHGR560NTSCScreen(Screen):
         next_dots1[x % 4 + 4] = True
         pixel_nbit_0 = self.palette.DOTS_TO_INDEX[tuple(next_dots0)]
         pixel_nbit_1 = self.palette.DOTS_TO_INDEX[tuple(next_dots1)]
-        return (
-            np.array([pixel_nbit_0, pixel_nbit_1], dtype=np.uint8),
-            np.array([self.palette.RGB[pixel_nbit_0],
-                      self.palette.RGB[pixel_nbit_1]], dtype=np.uint8))
+        return np.array([pixel_nbit_0, pixel_nbit_1], dtype=np.uint8)
 
     def bitmap_to_ntsc(self, bitmap: np.ndarray) -> np.ndarray:
         y_width = 12
