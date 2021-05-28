@@ -18,8 +18,8 @@ def srgb_to_linear(im: np.ndarray) -> np.ndarray:
     return (np.clip(rgb_linear, 0.0, 1.0) * 255).astype(np.float32)
 
 
-def linear_to_srgb(im: np.ndarray) -> np.ndarray:
-    srgb = linear_to_srgb_array(im / 255.0, gamma=2.4)
+def linear_to_srgb(im: np.ndarray, gamma=2.4) -> np.ndarray:
+    srgb = linear_to_srgb_array(im / 255.0, gamma=gamma)
     return (np.clip(srgb, 0.0, 1.0) * 255).astype(np.float32)
 
 
