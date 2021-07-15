@@ -1,5 +1,6 @@
 """RGB colour palettes to target for Apple II image conversions."""
 
+import colorspacious
 import numpy as np
 import image
 
@@ -7,6 +8,7 @@ import image
 class Palette:
     RGB = {}
     SRGB = None
+    CAM02UCS = {}
     DOTS = {}
     DOTS_TO_INDEX = {}
     DISTANCES_PATH = None
@@ -16,17 +18,22 @@ class Palette:
     PALETTE_DEPTH = None
 
     def __init__(self, load_distances=True):
-        if load_distances:
-            # CIE2000 colour distance matrix from 24-bit RGB tuple to 4-bit
-            # palette colour.
-            self.distances = np.memmap(self.DISTANCES_PATH, mode="r+",
-                                       dtype=np.uint8, shape=(16777216,
-                                                              len(self.SRGB)))
+        # if load_distances:
+        #     # CIE2000 colour distance matrix from 24-bit RGB tuple to 4-bit
+        #     # palette colour.
+        #     self.distances = np.memmap(self.DISTANCES_PATH, mode="r+",
+        #                                dtype=np.uint8, shape=(16777216,
+        #                                                       len(self.SRGB)))
 
         self.RGB = {}
         for k, v in self.SRGB.items():
             self.RGB[k] = (np.clip(image.srgb_to_linear_array(v / 255), 0.0,
                                    1.0) * 255).astype(np.uint8)
+
+            self.CAM02UCS[k] = colorspacious.cspace_convert(
+                v, "sRGB255", colorspacious.CAM02UCS)
+
+        # print(self.CAM02UCS)
 
         # Maps palette values to screen dots.  Note that these are the same as
         # the binary index values in reverse order.
