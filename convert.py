@@ -4,7 +4,7 @@ import argparse
 import os.path
 import time
 
-import colorspacious
+import colour
 from PIL import Image
 import numpy as np
 
@@ -91,13 +91,13 @@ def main():
                                        screen.Y_RES)).astype(np.float32)
 
     # convert from sRGB1-linear to CAM02UCS perceptually uniform colour space
-    cam02ucs = colorspacious.cspace_convert(
-        resized/255, "sRGB1-linear", colorspacious.CAM02UCS).astype(np.float32)
+    cam16ucs = colour.convert(
+        resized / 255, "RGB", "CAM16UCS").astype(np.float32)
     # print(cam02ucs)
 
     dither = dither_pattern.PATTERNS[args.dither]()
     output_nbit, _ = dither_pyx.dither_image(
-        screen, cam02ucs, dither, lookahead, args.verbose)
+        screen, cam16ucs, dither, lookahead, args.verbose)
     bitmap = screen.pack(output_nbit)
 
     # Show output image by rendering in target palette

@@ -1,6 +1,6 @@
 """RGB colour palettes to target for Apple II image conversions."""
 
-import colorspacious
+import colour
 import numpy as np
 import image
 
@@ -29,9 +29,8 @@ class Palette:
         for k, v in self.SRGB.items():
             self.RGB[k] = (np.clip(image.srgb_to_linear_array(v / 255), 0.0,
                                    1.0) * 255).astype(np.uint8)
-
-            self.CAM02UCS[k] = colorspacious.cspace_convert(
-                v, "sRGB255", colorspacious.CAM02UCS)
+            self.CAM02UCS[k] = colour.convert(
+                v / 255, "sRGB", "CAM16UCS").astype(np.float32)
 
         # print(self.CAM02UCS)
 
