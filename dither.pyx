@@ -55,8 +55,8 @@ cdef int dither_bounds_yb(Dither *dither, int y_res, int y) nogil:
 
 @cython.boundscheck(False)
 @cython.wraparound(False)
-@functools.lru_cache(None)
-def lookahead_options(object screen, int lookahead, unsigned char last_pixel_nbit, int x):
+# @functools.lru_cache(None)
+cdef inline unsigned char lookahead_pixels(unsigned char last_pixel_nbit, unsigned int next_pixels, int lookahead):
     """Compute all possible n-bit palette values for upcoming pixels, given x coord and state of n pixels to the left.
 
     Args:
@@ -69,28 +69,25 @@ def lookahead_options(object screen, int lookahead, unsigned char last_pixel_nbi
     Returns: matrix of size (2**lookahead, lookahead) containing all 2**lookahead possible vectors of n-bit palette
         values accessible at positions x .. x + lookahead
     """
-    cdef unsigned char[:, ::1] options_nbit = np.empty((2 ** lookahead, lookahead), dtype=np.uint8)
-    cdef int i, j, xx, p
-    cdef unsigned char output_pixel_nbit
-    cdef unsigned char[::1] palette_choices_nbit
+    # XXX palette bit depth
+    return (last_pixel_nbit >> (lookahead+1)) | (next_pixels << (8 - (lookahead + 1)))
 
-    cdef object palette = screen.palette
-    cdef dict palette_rgb = palette.RGB
-    for i in range(2 ** lookahead):
-        output_pixel_nbit = last_pixel_nbit
-        for j in range(lookahead):
-            xx = x + j
-            # Two possible n-bit palette choices at position xx, given state of n pixels to left.
-            # TODO: port screen.py to pyx
-            palette_choices_nbit = screen.pixel_palette_options(output_pixel_nbit, xx)
-            next_bit_choice = (i & (1 << j)) >> j
-            options_nbit[i, j] = palette_choices_nbit[next_bit_choice]
-            output_pixel_nbit >>= 1
-            output_pixel_nbit |= (next_bit_choice << 7)
-            # print(bin(i),j,bin(last_pixel_nbit), bin(output_pixel_nbit), bin(options_nbit[i, j]))
-            #print("Picking %s" % ((i & (1 << j)) >> j))
+#    cdef unsigned char[:, ::1] options_nbit = np.empty((2 ** lookahead, lookahead), dtype=np.uint8)
+#    cdef int i, j, p, k
+#    cdef unsigned char output_pixel_nbit
+#    cdef unsigned char[::1] palette_choices_nbit
 
-    return options_nbit
+#    # cdef object palette = screen.palette
+#    # cdef dict palette_rgb = palette.RGB
+
+#    cdef unsigned int[::1] lookahead_pixel_values = (np.arange(2**lookahead, dtype=np.uint32) << 8) | last_pixel_nbit
+#    # XXX inline into dither_lookahead once working
+
+#    for i in range(2 ** lookahead):
+#        for j in range(lookahead):
+#            options_nbit[:, j] = (lookahead_pixel_values[i] >> (j+1)) & 0xff
+
+#    return options_nbit
 
 
 # Look ahead a number of pixels and compute choice for next pixel with lowest total squared error after dithering.
@@ -110,8 +107,8 @@ def lookahead_options(object screen, int lookahead, unsigned char last_pixel_nbi
 #
 @cython.boundscheck(False)
 @cython.wraparound(False)
-cdef int dither_lookahead(Dither* dither, float[:, ::1] palette_rgb,
-        float[:, :, ::1] image_rgb, int x, int y, unsigned char[:, ::1] options_nbit, int lookahead,
+cdef int dither_lookahead(Dither* dither, float[:, :, ::1] palette_rgb,
+        float[:, :, ::1] image_rgb, int x, int y, int lookahead, unsigned char last_pixels,
         int x_res):
     cdef int i, j, k, l
     cdef float[3] quant_error
@@ -130,6 +127,15 @@ cdef int dither_lookahead(Dither* dither, float[:, ::1] palette_rgb,
 
     cdef unsigned char lookahead_bits
 
+    # def unsigned int[::1] lookahead_pixel_values = (np.arange(2**lookahead, dtype=np.uint32) << 8) | last_pixel_nbit
+    # XXX inline into dither_lookahead once working
+
+    #for i in range(2 ** lookahead):
+    #    for j in range(lookahead):
+    #        options_nbit[:, j] = (lookahead_pixel_values[i] >> (j+1)) & 0xff
+
+    cdef unsigned char next_pixels
+
     # For each 2**lookahead possibilities for the on/off state of the next lookahead pixels, apply error diffusion
     # and compute the total squared error to the source image.  Since we only have two possible colours for each
     # given pixel (dependent on the state already chosen for pixels to the left), we need to look beyond local minima.
@@ -145,37 +151,25 @@ cdef int dither_lookahead(Dither* dither, float[:, ::1] palette_rgb,
         for j in range(xxr - x):
             xl = dither_bounds_xl(dither, j)
             xr = dither_bounds_xr(dither, xxr - x, j)
+
+            next_pixels = lookahead_pixels(last_pixels, i, j)
+
             # We don't update the input at position x (since we've already chosen
             # fixed outputs), but we do propagate quantization errors to positions >x
             # so we can compensate for how good/bad these choices were.  i.e. the
             # options_rgb choices are fixed, but we can still distribute quantization error
             # from having made these choices, in order to compute the total error.
             for k in range(3):
-                quant_error[k] = lah_image_rgb[j * lah_shape2 + k] - palette_rgb[options_nbit[i,j], k]
+                quant_error[k] = lah_image_rgb[j * lah_shape2 + k] - palette_rgb[next_pixels, (x+j) % 4, k]
             apply_one_line(dither, xl, xr, j, lah_image_rgb, lah_shape2, quant_error)
 
-            #r = <long>lah_image_rgb[j * lah_shape2 + 0]
-            #g = <long>lah_image_rgb[j * lah_shape2 + 1]
-            #b = <long>lah_image_rgb[j * lah_shape2 + 2]
-            #flat = (r << 16) + (g << 8) + b
-            # bit4 = options_nbit[i, j]
+            total_error += colour_distance_squared(lah_image_rgb[j*lah_shape2], lah_image_rgb[j*lah_shape2+1], lah_image_rgb[j*lah_shape2+2], palette_rgb[next_pixels, (x+j)%4])
 
-            ## XXX parametrize number of palette bits
-            #if j < 8:
-            #    lookahead_bits = (last_bits >> (j+1))
-            #else:
-            #    lookahead_bits = 0
-            #lookahead_bits |= (options_nbit[i, j]) << (7-j)
-            #lookahead_bits &= (1<<8)-1
-
-            total_error += colour_distance_squared(lah_image_rgb[j*lah_shape2], lah_image_rgb[j*lah_shape2+1], lah_image_rgb[j*lah_shape2+2], palette_rgb[options_nbit[i,j]])
-
-            #if x > (560*3/4) and y == 180:
-            #    print(x, bin(i), j, bin(options_nbit[i, j]), bin(best), best_error, total_error)
+            #if y == 0:
+            #    print(x, bin(i), j, bin(next_pixels), bin(best), best_error, total_error, list(palette_rgb[next_pixels, (x+j)%4]))
 
             if total_error >= best_error:
                 break
-
 
         if total_error < best_error:
             best_error = total_error
@@ -183,7 +177,6 @@ cdef int dither_lookahead(Dither* dither, float[:, ::1] palette_rgb,
 
     free(lah_image_rgb)
     return best
-
 
 @cython.boundscheck(False)
 @cython.wraparound(False)
@@ -295,7 +288,7 @@ cdef unsigned char find_nearest_colour(float[::1] pixel_rgb, unsigned char[::1] 
 @cython.boundscheck(False)
 @cython.wraparound(False)
 def dither_image(screen, float[:, :, ::1] image_rgb, dither, int lookahead, unsigned char verbose):
-    cdef int y, x, i
+    cdef int y, x, i, k
     cdef float[3] input_pixel_rgb
     cdef float[3] quant_error
     cdef unsigned char [:, ::1] options_nbit
@@ -311,10 +304,10 @@ def dither_image(screen, float[:, :, ::1] image_rgb, dither, int lookahead, unsi
     cdef int xres = screen.X_RES
 
     # XXX not rgb any more
-    cdef float[:, ::1] palette_rgb = np.zeros((len(screen.palette.CAM02UCS), 3), dtype=np.float32)
-    for i in screen.palette.CAM02UCS.keys():
+    cdef float[:, :, ::1] palette_rgb = np.zeros((len(screen.palette.CAM02UCS), 4, 3), dtype=np.float32)
+    for i, k in screen.palette.CAM02UCS.keys():
         for j in range(3):
-            palette_rgb[i, j] = screen.palette.CAM02UCS[i][j]
+            palette_rgb[i, k, j] = screen.palette.CAM02UCS[i, k][j]
 
     # cdef (unsigned char)[:, ::1] distances = screen.palette.distances
 
@@ -332,8 +325,6 @@ def dither_image(screen, float[:, :, ::1] image_rgb, dither, int lookahead, unsi
     cdef (unsigned char)[:, ::1] image_nbit = np.empty(
         (image_rgb.shape[0], image_rgb.shape[1]), dtype=np.uint8)
 
-    # print(lookahead_options(screen, lookahead, 0b11111111, 0))
-
     for y in range(yres):
         if verbose:
             print("%d/%d" % (y, yres))
@@ -343,16 +334,13 @@ def dither_image(screen, float[:, :, ::1] image_rgb, dither, int lookahead, unsi
                 input_pixel_rgb[i] = image_rgb[y,x,i]
             if lookahead:
                 # Compute all possible 2**N choices of n-bit pixel colours for positions x .. x + lookahead
-                lookahead_palette_choices_nbit = lookahead_options(screen, lookahead, output_pixel_nbit, x % 4)
-
+                # lookahead_palette_choices_nbit = lookahead_options(lookahead, output_pixel_nbit)
                 # Apply error diffusion for each of these 2**N choices, and compute which produces the closest match
                 # to the source image over the succeeding N pixels
-                best_idx = dither_lookahead(
-                        &cdither, palette_rgb, image_rgb, x, y, lookahead_palette_choices_nbit, lookahead,
-                        xres)
-                output_pixel_nbit >>= 1
-                output_pixel_nbit |= (best_idx & 0b1) << 7  # XXX n bit shift
-                # print("Picked %d" % (best_idx & 0b1))
+                next_pixels = dither_lookahead(
+                        &cdither, palette_rgb, image_rgb, x, y, lookahead, output_pixel_nbit, xres)
+                output_pixel_nbit = lookahead_pixels(output_pixel_nbit, next_pixels, 0)
+                # print("Picked %s" % bin(output_pixel_nbit)) # (best_idx & 0b1))
                 # lookahead_palette_choices_nbit[best_idx, 0]
             #else:
             #    # Choose the closest colour among the available n-bit palette options
@@ -360,11 +348,10 @@ def dither_image(screen, float[:, :, ::1] image_rgb, dither, int lookahead, unsi
             #    output_pixel_nbit = find_nearest_colour(input_pixel_rgb, palette_choices_nbit, distances)
 
             # Apply error diffusion from chosen output pixel value
-            # print("picked %d, %s" % (lookahead_palette_choices_nbit[best_idx, 0], bin(lookahead_palette_choices_nbit[best_idx, 0])))
-            output_pixel_rgb = palette_rgb[lookahead_palette_choices_nbit[best_idx, 0]]
+            output_pixel_rgb = palette_rgb[output_pixel_nbit, x % 4]
             for i in range(3):
                 quant_error[i] = input_pixel_rgb[i] - output_pixel_rgb[i]
-            image_nbit[y, x] = lookahead_palette_choices_nbit[best_idx, 0]  # output_pixel_nbit
+            image_nbit[y, x] = output_pixel_nbit
             apply(&cdither, xres, yres, x, y, image_rgb, quant_error)
 
             for i in range(3):
