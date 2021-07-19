@@ -65,6 +65,10 @@ def main():
     parser.add_argument(
         '--verbose', action=argparse.BooleanOptionalAction,
         default=False, help="Show progress during conversion")
+    parser.add_argument(
+        '--gamma_correct', type=float, default=2.4,
+        help='Gamma-correct image by this value (default: 2.4)'
+    )
     args = parser.parse_args()
 
     palette = palette_py.PALETTES[args.palette]()
@@ -88,7 +92,9 @@ def main():
         image_py.resize(image, screen.NATIVE_X_RES, screen.NATIVE_Y_RES * 2,
                         srgb_output=True).show()
     resized = np.array(image_py.resize(image, screen.X_RES,
-                                       screen.Y_RES)).astype(np.float32)
+                                       screen.Y_RES,
+                                       gamma=args.gamma_correct)).astype(
+        np.float32)
 
     # convert from sRGB1-linear to CAM02UCS perceptually uniform colour space
     cam16ucs = colour.convert(

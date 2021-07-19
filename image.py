@@ -13,8 +13,8 @@ def linear_to_srgb_array(a: np.ndarray, gamma=2.4) -> np.ndarray:
                     0.055)
 
 
-def srgb_to_linear(im: np.ndarray) -> np.ndarray:
-    rgb_linear = srgb_to_linear_array(im / 255.0, gamma=2.4)
+def srgb_to_linear(im: np.ndarray, gamma=2.4) -> np.ndarray:
+    rgb_linear = srgb_to_linear_array(im / 255.0, gamma=gamma)
     return (np.clip(rgb_linear, 0.0, 1.0) * 255).astype(np.float32)
 
 
@@ -32,13 +32,16 @@ def open(filename: str) -> np.ndarray:
     return im
 
 
-def resize(image: Image, x_res, y_res, srgb_output: bool = False) -> Image:
+def resize(
+        image: Image, x_res, y_res, gamma: float = 2.4,
+        srgb_output: bool = False) -> Image:
     # Convert to linear RGB before rescaling so that colour interpolation is
     # in linear space
-    linear = srgb_to_linear(np.asarray(image)).astype(np.uint8)
+    linear = srgb_to_linear(np.asarray(image), gamma=gamma).astype(np.uint8)
     res = Image.fromarray(linear).resize((x_res, y_res), Image.LANCZOS)
     if srgb_output:
         return Image.fromarray(
-            linear_to_srgb(np.array(res, dtype=np.float32)).astype(np.uint8))
+            linear_to_srgb(np.array(res, dtype=np.float32), gamma=gamma).astype(
+                np.uint8))
     else:
         return res
