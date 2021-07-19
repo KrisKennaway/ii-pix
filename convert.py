@@ -91,18 +91,15 @@ def main():
     if args.show_input:
         image_py.resize(image, screen.NATIVE_X_RES, screen.NATIVE_Y_RES * 2,
                         srgb_output=True).show()
-    resized = np.array(image_py.resize(image, screen.X_RES,
-                                       screen.Y_RES,
-                                       gamma=args.gamma_correct)).astype(
+    rgb = np.array(image_py.resize(image, screen.X_RES,
+                                   screen.Y_RES,
+                                   gamma=args.gamma_correct) / 255).astype(
         np.float32)
 
-    # convert from sRGB1-linear to CAM02UCS perceptually uniform colour space
-    xyz = colour.convert(
-        resized / 255, "RGB", "CIE XYZ").astype(np.float32)
-
-    # bits24 = np.arange(2**24).reshape(-1,1)
-    # all_rgb = (np.concatenate(        [bits24 >> 16 & 0xff, bits24 >> 8 & 0xff, bits24 & 0xff], axis=1) /               255).astype(np.float32)
-    # all_xyz = colour.convert(all_rgb, "RGB", "CIE XYZ")
+    # bits24 = np.arange(2 ** 24).reshape(-1, 1)
+    # all_rgb = (np.concatenate(
+    #     [bits24 >> 16 & 0xff, bits24 >> 8 & 0xff, bits24 & 0xff],
+    #     axis=1) / 255).astype(np.float32)
     # all_cam16 = colour.convert(all_rgb, "RGB", "CAM16UCS").astype(np.float32)
     # f = np.memmap("rgb_to_cam16ucs.data", mode="w+", dtype=np.float32,
     #               shape=all_cam16.shape)
@@ -114,7 +111,7 @@ def main():
                           shape=(2 ** 24, 3))
     dither = dither_pattern.PATTERNS[args.dither]()
     output_nbit, _ = dither_pyx.dither_image(
-        screen, xyz, dither, lookahead, args.verbose, all_cam16)
+        screen, rgb, dither, lookahead, args.verbose, all_cam16)
     bitmap = screen.pack(output_nbit)
 
     # Show output image by rendering in target palette
