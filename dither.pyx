@@ -1,11 +1,10 @@
 # cython: infer_types=True
-# cython: profile=True
+# cython: profile=False
 
-import math
 cimport cython
-import functools
+import colour
+import math
 import numpy as np
-from cython.view cimport array as cvarray
 from libc.stdlib cimport malloc, free
 
 
@@ -88,9 +87,9 @@ cdef inline unsigned char lookahead_pixels(unsigned char last_pixel_nbit, unsign
 #
 @cython.boundscheck(False)
 @cython.wraparound(False)
-cdef int dither_lookahead(Dither* dither, float[:, :, ::1] palette_rgb,
+cdef int dither_lookahead(Dither* dither, float[:, :, ::1] palette_cam16, float[:, :, ::1] palette_xyz,
         float[:, :, ::1] image_rgb, int x, int y, int lookahead, unsigned char last_pixels,
-        int x_res) nogil:
+        int x_res, float[:,::1] all_cam16ucs) nogil:
     cdef int i, j, k
     cdef float[3] quant_error
     cdef int best
@@ -104,6 +103,7 @@ cdef int dither_lookahead(Dither* dither, float[:, :, ::1] palette_rgb,
     cdef int lah_shape1 = xxr - x
     cdef int lah_shape2 = 3
     cdef float *lah_image_rgb = <float *> malloc(lah_shape1 * lah_shape2 * sizeof(float))
+    cdef float[::1] lah_cam16ucs
 
     # For each 2**lookahead possibilities for the on/off state of the next lookahead pixels, apply error diffusion
     # and compute the total squared error to the source image.  Since we only have two possible colours for each
@@ -130,12 +130,11 @@ cdef int dither_lookahead(Dither* dither, float[:, :, ::1] palette_rgb,
             # options_rgb choices are fixed, but we can still distribute quantization error
             # from having made these choices, in order to compute the total error.
             for k in range(3):
-                quant_error[k] = lah_image_rgb[j * lah_shape2 + k] - palette_rgb[next_pixels, phase, k]
+                quant_error[k] = lah_image_rgb[j * lah_shape2 + k] - palette_xyz[next_pixels, phase, k]
             apply_one_line(dither, xl, xr, j, lah_image_rgb, lah_shape2, quant_error)
 
-            total_error += colour_distance_squared(
-                lah_image_rgb[j*lah_shape2], lah_image_rgb[j*lah_shape2+1], lah_image_rgb[j*lah_shape2+2],
-                palette_rgb[next_pixels, phase])
+            lah_cam16ucs = xyz_to_cam16ucs(all_cam16ucs, lah_image_rgb[j*lah_shape2], lah_image_rgb[j*lah_shape2+1], lah_image_rgb[j*lah_shape2+2])
+            total_error += colour_distance_squared(lah_cam16ucs, palette_cam16[next_pixels, phase])
 
             if total_error >= best_error:
                 break
@@ -148,11 +147,16 @@ cdef int dither_lookahead(Dither* dither, float[:, :, ::1] palette_rgb,
     return best
 
 
+cdef inline float[::1] xyz_to_cam16ucs(float[:, ::1] all_cam16ucs, float x, float y, float z) nogil:
+    cdef int flat_xyz = (<int>(x*255) << 16) + (<int>(y*255) << 8) + <int>(z*255)
+    return all_cam16ucs[flat_xyz]
+
+
 # XXX fix signature
 @cython.boundscheck(False)
 @cython.wraparound(False)
-cdef inline float colour_distance_squared(float colour1_0, float colour1_1, float colour1_2, float[::1] colour2) nogil:
-    return (colour1_0 - colour2[0])**2 + (colour1_1 - colour2[1])**2 + (colour1_2 - colour2[2])**2
+cdef inline float colour_distance_squared(float[::1] colour1, float[::1] colour2) nogil:
+    return (colour1[0] - colour2[0])**2 + (colour1[1] - colour2[1])**2 + (colour1[2] - colour2[2])**2
 
 
 # Perform error diffusion to a single image row.
@@ -175,7 +179,8 @@ cdef void apply_one_line(Dither* dither, int xl, int xr, int x, float[] image, i
     for i in range(xl, xr):
         error_fraction = dither.pattern[i - x + dither.x_origin]
         for j in range(3):
-            image[i * image_shape1 + j] = clip(image[i * image_shape1 + j] + error_fraction * quant_error[j], 0 if j == 0 else -1, 1)
+            image[i * image_shape1 + j] = clip(image[i * image_shape1 + j] + error_fraction * quant_error[j], 0, 1)
+            #image[i * image_shape1 + j] = image[i * image_shape1 + j] + error_fraction * quant_error[j]
 
 
 # Perform error diffusion across multiple image rows.
@@ -209,7 +214,8 @@ cdef void apply(Dither* dither, int x_res, int y_res, int x, int y, float[:,:,::
         for j in range(xl, xr):
             error_fraction = dither.pattern[(i - y) * dither.x_shape + j - x + dither.x_origin]
             for k in range(3):
-                image[i,j,k] = clip(image[i,j,k] + error_fraction * quant_error[k], 0 if k == 0 else -1, 1)
+                image[i,j,k] = clip(image[i,j,k] + error_fraction * quant_error[k], 0, 1)
+#                image[i,j,k] = image[i,j,k] + error_fraction * quant_error[k]
 
 # Compute closest colour from array of candidate n-bit colour palette values.
 #
@@ -255,7 +261,7 @@ cdef unsigned char find_nearest_colour(float[::1] pixel_rgb, unsigned char[::1] 
 #
 @cython.boundscheck(False)
 @cython.wraparound(False)
-def dither_image(screen, float[:, :, ::1] image_rgb, dither, int lookahead, unsigned char verbose):
+def dither_image(screen, float[:, :, ::1] image_rgb, dither, int lookahead, unsigned char verbose, float[:,::1] all_cam16ucs):
     cdef int y, x, i, j, k
     # cdef float[3] input_pixel_rgb
     cdef float[3] quant_error
@@ -268,11 +274,15 @@ def dither_image(screen, float[:, :, ::1] image_rgb, dither, int lookahead, unsi
     cdef int yres = screen.Y_RES
     cdef int xres = screen.X_RES
 
-    # XXX not rgb any more
-    cdef float[:, :, ::1] palette_rgb = np.zeros((len(screen.palette.CAM02UCS), 4, 3), dtype=np.float32)
-    for i, j in screen.palette.CAM02UCS.keys():
+    cdef float[:, :, ::1] palette_cam16 = np.zeros((len(screen.palette.CAM16UCS), 4, 3), dtype=np.float32)
+    for i, j in screen.palette.CAM16UCS.keys():
         for k in range(3):
-            palette_rgb[i, j, k] = screen.palette.CAM02UCS[i, j][k]
+            palette_cam16[i, j, k] = screen.palette.CAM16UCS[i, j][k]
+
+    cdef float[:, :, ::1] palette_xyz = np.zeros((len(screen.palette.XYZ), 4, 3), dtype=np.float32)
+    for i, j in screen.palette.XYZ.keys():
+        for k in range(3):
+            palette_xyz[i, j, k] = screen.palette.XYZ[i, j][k]
 
     cdef Dither cdither
     cdither.y_shape = dither.PATTERN.shape[0]
@@ -301,7 +311,7 @@ def dither_image(screen, float[:, :, ::1] image_rgb, dither, int lookahead, unsi
                 # Apply error diffusion for each of these 2**N choices, and compute which produces the closest match
                 # to the source image over the succeeding N pixels
                 best_next_pixels = dither_lookahead(
-                        &cdither, palette_rgb, image_rgb, x, y, lookahead, output_pixel_nbit, xres)
+                        &cdither, palette_cam16, palette_xyz, image_rgb, x, y, lookahead, output_pixel_nbit, xres, all_cam16ucs)
                 # Apply best choice for next 1 pixel
                 output_pixel_nbit = lookahead_pixels(output_pixel_nbit, best_next_pixels, lookahead=0)
             #else:
@@ -311,7 +321,7 @@ def dither_image(screen, float[:, :, ::1] image_rgb, dither, int lookahead, unsi
 
             # Apply error diffusion from chosen output pixel value
             for i in range(3):
-                output_pixel_rgb[i] = palette_rgb[output_pixel_nbit, x % 4, i]
+                output_pixel_rgb[i] = palette_xyz[output_pixel_nbit, x % 4, i]
                 quant_error[i] = image_rgb[y,x,i] - output_pixel_rgb[i]
             apply(&cdither, xres, yres, x, y, image_rgb, quant_error)
 

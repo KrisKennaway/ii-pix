@@ -9,7 +9,8 @@ import palette_ntsc
 class Palette:
     RGB = {}
     SRGB = None
-    CAM02UCS = {}
+    CAM16UCS = {}
+    XYZ = {}
     DOTS = {}
     DOTS_TO_INDEX = {}
     DISTANCES_PATH = None
@@ -30,8 +31,10 @@ class Palette:
         for k, v in self.SRGB.items():
             self.RGB[k] = (np.clip(image.srgb_to_linear_array(v / 255), 0.0,
                                    1.0) * 255).astype(np.uint8)
-            self.CAM02UCS[k] = colour.convert(
-                v / 255, "sRGB", "CAM16UCS").astype(np.float32)
+            self.CAM16UCS[k] = colour.convert(v / 255, "sRGB",
+                                              "CAM16UCS").astype(np.float32)
+            self.XYZ[k] = colour.convert(v / 255, "sRGB",
+                                              "CIE XYZ").astype(np.float32)
 
         # print(self.CAM02UCS)
 
@@ -131,6 +134,7 @@ class NTSCPalette(Palette):
 
     # Computed using ntsc_colours.py
     SRGB = palette_ntsc.SRGB
+
 
 PALETTES = {
     # 'openemulator': OpenEmulatorPalette,

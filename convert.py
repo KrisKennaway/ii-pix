@@ -97,13 +97,24 @@ def main():
         np.float32)
 
     # convert from sRGB1-linear to CAM02UCS perceptually uniform colour space
-    cam16ucs = colour.convert(
-        resized / 255, "RGB", "CAM16UCS").astype(np.float32)
-    # print(cam02ucs)
+    xyz = colour.convert(
+        resized / 255, "RGB", "CIE XYZ").astype(np.float32)
 
+    # bits24 = np.arange(2**24).reshape(-1,1)
+    # all_rgb = (np.concatenate(        [bits24 >> 16 & 0xff, bits24 >> 8 & 0xff, bits24 & 0xff], axis=1) /               255).astype(np.float32)
+    # all_xyz = colour.convert(all_rgb, "RGB", "CIE XYZ")
+    # all_cam16 = colour.convert(all_rgb, "RGB", "CAM16UCS").astype(np.float32)
+    # f = np.memmap("rgb_to_cam16ucs.data", mode="w+", dtype=np.float32,
+    #               shape=all_cam16.shape)
+    # f[:] = all_cam16
+    # if True:
+    #     return
+
+    all_cam16 = np.memmap("rgb_to_cam16ucs.data", mode="r+", dtype=np.float32,
+                          shape=(2 ** 24, 3))
     dither = dither_pattern.PATTERNS[args.dither]()
     output_nbit, _ = dither_pyx.dither_image(
-        screen, cam16ucs, dither, lookahead, args.verbose)
+        screen, xyz, dither, lookahead, args.verbose, all_cam16)
     bitmap = screen.pack(output_nbit)
 
     # Show output image by rendering in target palette
