@@ -87,4 +87,4 @@ PATTERNS = {
     'none': NoDither
 }
 
-DEFAULT_PATTERN = 'jarvis-mod'
+DEFAULT_PATTERN = 'floyd'
