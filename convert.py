@@ -86,32 +86,22 @@ def main():
             screen = screen_py.DHGR560Screen(palette)
         lookahead = args.lookahead
 
+    # Conversion matrix from RGB to CAM16UCS colour values.  Indexed by
+    # 24-bit RGB value
+    rgb_to_cam16 = np.load("data/rgb_to_cam16ucs.npy")
+
     # Open and resize source image
     image = image_py.open(args.input)
     if args.show_input:
         image_py.resize(image, screen.NATIVE_X_RES, screen.NATIVE_Y_RES * 2,
                         srgb_output=True).show()
-    rgb = np.array(image_py.resize(image, screen.X_RES,
-                                   screen.Y_RES,
-                                   gamma=args.gamma_correct) / 255).astype(
-        np.float32)
+    rgb = np.array(
+        image_py.resize(image, screen.X_RES, screen.Y_RES,
+                        gamma=args.gamma_correct)).astype(np.float32) / 255
 
-    # bits24 = np.arange(2 ** 24).reshape(-1, 1)
-    # all_rgb = (np.concatenate(
-    #     [bits24 >> 16 & 0xff, bits24 >> 8 & 0xff, bits24 & 0xff],
-    #     axis=1) / 255).astype(np.float32)
-    # all_cam16 = colour.convert(all_rgb, "RGB", "CAM16UCS").astype(np.float32)
-    # f = np.memmap("rgb_to_cam16ucs.data", mode="w+", dtype=np.float32,
-    #               shape=all_cam16.shape)
-    # f[:] = all_cam16
-    # if True:
-    #     return
-
-    all_cam16 = np.memmap("rgb_to_cam16ucs.data", mode="r+", dtype=np.float32,
-                          shape=(2 ** 24, 3))
     dither = dither_pattern.PATTERNS[args.dither]()
     output_nbit, _ = dither_pyx.dither_image(
-        screen, rgb, dither, lookahead, args.verbose, all_cam16)
+        screen, rgb, dither, lookahead, args.verbose, rgb_to_cam16)
     bitmap = screen.pack(output_nbit)
 
     # Show output image by rendering in target palette
