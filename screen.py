@@ -140,15 +140,25 @@ class DHGR560Screen(Screen):
         return bitmap
 
     def pixel_palette_options(self, last_pixel_nbit, x: int):
-        # The two available colours for position x are given by the 4-bit
-        # value of position x-1, and the 4-bit value produced by toggling the
-        # value of the x % 4 bit (the current value of NTSC phase)
-        last_dots = self.palette.DOTS[last_pixel_nbit]
-        other_dots = list(last_dots)
-        other_dots[x % 4] = not other_dots[x % 4]
-        other_dots = tuple(other_dots)
-        other_pixel_nbit = self.palette.DOTS_TO_INDEX[other_dots]
-        return np.array([last_pixel_nbit, other_pixel_nbit], dtype=np.uint8)
+        last_dots = self.palette.DOTS[last_pixel_nbit][1:] + [None]
+
+        # rearrange into palette order
+        next_dots = [None] * 8
+        for i in range(4):
+            next_dots[(i - x) % 4] = last_dots[i]
+            next_dots[(i - x) % 4 + 4] = last_dots[i + 4]
+
+        # XXX wrong
+
+        assert next_dots[(3 - x) % 4 + 4] is None
+        #print(x, last_dots, next_dots)
+
+        next_dots[(3 - x) % 4 + 4] = False
+        next_pixel_nbit_0 = self.palette.DOTS_TO_INDEX[next_dots]
+
+        next_dots[(3 - x) % 4 + 4] = True
+        next_pixel_nbit_1 = self.palette.DOTS_TO_INDEX[next_dots]
+        return np.array([next_pixel_nbit_0, next_pixel_nbit_1], dtype=np.uint8)
 
 
 # TODO: refactor to share implementation with DHGR560Screen
@@ -175,7 +185,8 @@ class DHGR560NTSCScreen(Screen):
         window indexed by x % 4, which gives the index into our 256-colour RGB
         palette.
         """
-        image_rgb = np.empty((self.NATIVE_Y_RES, self.NATIVE_X_RES, 3), dtype=np.uint8)
+        image_rgb = np.empty((self.NATIVE_Y_RES, self.NATIVE_X_RES, 3),
+                             dtype=np.uint8)
         for y in range(self.Y_RES):
             pixel = [False, False, False, False, False, False, False, False]
             for x in range(self.NATIVE_X_RES):
@@ -186,19 +197,37 @@ class DHGR560NTSCScreen(Screen):
         return image_rgb
 
     def pixel_palette_options(self, last_pixel_nbit, x: int):
-        # The two available 8-bit pixel colour choices are given by:
-        # - Rotating the pixel value from the current x % 4 + 4 position to
-        #   x % 4
-        # - choosing 0 and 1 for the new values of x % 4 + 4
-        next_dots0 = list(self.palette.DOTS[last_pixel_nbit])
-        next_dots1 = list(next_dots0)
-        next_dots0[x % 4] = next_dots0[x % 4 + 4]
-        next_dots0[x % 4 + 4] = False
-        next_dots1[x % 4] = next_dots1[x % 4 + 4]
-        next_dots1[x % 4 + 4] = True
-        pixel_nbit_0 = self.palette.DOTS_TO_INDEX[tuple(next_dots0)]
-        pixel_nbit_1 = self.palette.DOTS_TO_INDEX[tuple(next_dots1)]
-        return np.array([pixel_nbit_0, pixel_nbit_1], dtype=np.uint8)
+        # # The two available 8-bit pixel colour choices are given by:
+        # # - Rotating the pixel value from the current x % 4 + 4 position to
+        # #   x % 4
+        # # - choosing 0 and 1 for the new values of x % 4 + 4
+        # next_dots0 = list(self.palette.DOTS[last_pixel_nbit])
+        # next_dots1 = list(next_dots0)
+        # next_dots0[x % 4] = next_dots0[x % 4 + 4]
+        # next_dots0[x % 4 + 4] = False
+        # next_dots1[x % 4] = next_dots1[x % 4 + 4]
+        # next_dots1[x % 4 + 4] = True
+        # pixel_nbit_0 = self.palette.DOTS_TO_INDEX[tuple(next_dots0)]
+        # pixel_nbit_1 = self.palette.DOTS_TO_INDEX[tuple(next_dots1)]
+        # return np.array([pixel_nbit_0, pixel_nbit_1], dtype=np.uint8)
+        last_dots = list(self.palette.DOTS[last_pixel_nbit][1:]) + [None]
+
+        # rearrange into palette order
+        next_dots = [None] * 8
+        for i in range(4):
+            next_dots[i] = last_dots[(i - x) % 4]
+            next_dots[i + 4] = last_dots[(i - x) % 4 + 4]
+
+        assert next_dots[(3 + x) % 4 + 4] is None
+        # print(x, last_dots, next_dots)
+
+        next_dots[(3 + x) % 4 + 4] = False
+        next_pixel_nbit_0 = self.palette.DOTS_TO_INDEX[tuple(next_dots)]
+
+        next_dots[(3 + x) % 4 + 4] = True
+        next_pixel_nbit_1 = self.palette.DOTS_TO_INDEX[tuple(next_dots)]
+        return np.array([next_pixel_nbit_0, next_pixel_nbit_1],
+                        dtype=np.uint8)
 
     def bitmap_to_ntsc(self, bitmap: np.ndarray) -> np.ndarray:
         y_width = 12
