@@ -10,7 +10,6 @@ class Palette:
     RGB = {}
     SRGB = None
     CAM16UCS = {}
-    XYZ = {}
     DOTS = {}
     DOTS_TO_INDEX = {}
 

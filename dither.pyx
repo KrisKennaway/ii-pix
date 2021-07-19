@@ -89,7 +89,7 @@ cdef inline unsigned char lookahead_pixels(unsigned char last_pixel_nbit, unsign
 @cython.wraparound(False)
 cdef int dither_lookahead(Dither* dither, float[:, :, ::1] palette_cam16, float[:, :, ::1] palette_rgb,
         float[:, :, ::1] image_rgb, int x, int y, int lookahead, unsigned char last_pixels,
-        int x_res, float[:,::1] all_cam16ucs) nogil:
+        int x_res, float[:,::1] rgb_to_cam16ucs) nogil:
     cdef int i, j, k
     cdef float[3] quant_error
     cdef int best
@@ -134,8 +134,8 @@ cdef int dither_lookahead(Dither* dither, float[:, :, ::1] palette_cam16, float[
                 quant_error[k] = lah_image_rgb[j * lah_shape2 + k] - palette_rgb[next_pixels, phase, k]
             apply_one_line(dither, xl, xr, j, lah_image_rgb, lah_shape2, quant_error)
 
-            lah_cam16ucs = rgb_to_cam16ucs(
-                all_cam16ucs, lah_image_rgb[j*lah_shape2], lah_image_rgb[j*lah_shape2+1], lah_image_rgb[j*lah_shape2+2])
+            lah_cam16ucs = convert_rgb_to_cam16ucs(
+                rgb_to_cam16ucs, lah_image_rgb[j*lah_shape2], lah_image_rgb[j*lah_shape2+1], lah_image_rgb[j*lah_shape2+2])
             total_error += colour_distance_squared(lah_cam16ucs, palette_cam16[next_pixels, phase])
 
             if total_error >= best_error:
@@ -151,9 +151,9 @@ cdef int dither_lookahead(Dither* dither, float[:, :, ::1] palette_cam16, float[
 
 @cython.boundscheck(False)
 @cython.wraparound(False)
-cdef inline float[::1] rgb_to_cam16ucs(float[:, ::1] all_cam16ucs, float r, float g, float b) nogil:
+cdef inline float[::1] convert_rgb_to_cam16ucs(float[:, ::1] rgb_to_cam16ucs, float r, float g, float b) nogil:
     cdef int rgb_24bit = (<int>(r*255) << 16) + (<int>(g*255) << 8) + <int>(b*255)
-    return all_cam16ucs[rgb_24bit]
+    return rgb_to_cam16ucs[rgb_24bit]
 
 
 @cython.boundscheck(False)
@@ -183,7 +183,6 @@ cdef void apply_one_line(Dither* dither, int xl, int xr, int x, float[] image, i
         error_fraction = dither.pattern[i - x + dither.x_origin]
         for j in range(3):
             image[i * image_shape1 + j] = clip(image[i * image_shape1 + j] + error_fraction * quant_error[j], 0, 1)
-            #image[i * image_shape1 + j] = image[i * image_shape1 + j] + error_fraction * quant_error[j]
 
 
 # Perform error diffusion across multiple image rows.
@@ -218,7 +217,6 @@ cdef void apply(Dither* dither, int x_res, int y_res, int x, int y, float[:,:,::
             error_fraction = dither.pattern[(i - y) * dither.x_shape + j - x + dither.x_origin]
             for k in range(3):
                 image[i,j,k] = clip(image[i,j,k] + error_fraction * quant_error[k], 0, 1)
-#                image[i,j,k] = image[i,j,k] + error_fraction * quant_error[k]
 
 # Compute closest colour from array of candidate n-bit colour palette values.
 #
@@ -264,7 +262,7 @@ cdef unsigned char find_nearest_colour(float[::1] pixel_rgb, unsigned char[::1] 
 #
 @cython.boundscheck(False)
 @cython.wraparound(False)
-def dither_image(screen, float[:, :, ::1] image_rgb, dither, int lookahead, unsigned char verbose, float[:,::1] all_cam16ucs):
+def dither_image(screen, float[:, :, ::1] image_rgb, dither, int lookahead, unsigned char verbose, float[:,::1] rgb_to_cam16ucs):
     cdef int y, x, i, j, k
     # cdef float[3] input_pixel_rgb
     cdef float[3] quant_error
@@ -277,6 +275,7 @@ def dither_image(screen, float[:, :, ::1] image_rgb, dither, int lookahead, unsi
     cdef int yres = screen.Y_RES
     cdef int xres = screen.X_RES
 
+    # TODO: convert this instead of storing on palette?
     cdef float[:, :, ::1] palette_cam16 = np.zeros((len(screen.palette.CAM16UCS), 4, 3), dtype=np.float32)
     for i, j in screen.palette.CAM16UCS.keys():
         for k in range(3):
@@ -314,7 +313,7 @@ def dither_image(screen, float[:, :, ::1] image_rgb, dither, int lookahead, unsi
                 # Apply error diffusion for each of these 2**N choices, and compute which produces the closest match
                 # to the source image over the succeeding N pixels
                 best_next_pixels = dither_lookahead(
-                        &cdither, palette_cam16, palette_rgb, image_rgb, x, y, lookahead, output_pixel_nbit, xres, all_cam16ucs)
+                        &cdither, palette_cam16, palette_rgb, image_rgb, x, y, lookahead, output_pixel_nbit, xres, rgb_to_cam16ucs)
                 # Apply best choice for next 1 pixel
                 output_pixel_nbit = lookahead_pixels(output_pixel_nbit, best_next_pixels, lookahead=0)
             #else:
