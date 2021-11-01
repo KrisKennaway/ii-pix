@@ -2,8 +2,6 @@
 # cython: profile=False
 
 cimport cython
-import colour
-import math
 import numpy as np
 from libc.stdlib cimport malloc, free
 
@@ -52,7 +50,8 @@ cdef int dither_bounds_yb(Dither *dither, int y_res, int y) nogil:
     return yb
 
 
-cdef inline unsigned char lookahead_pixels(unsigned char last_pixel_nbit, unsigned int next_pixels, int lookahead) nogil:
+cdef inline unsigned char lookahead_pixels(
+        unsigned char last_pixel_nbit, unsigned int next_pixels, int lookahead) nogil:
     """Compute all possible n-bit palette values for upcoming pixels, given x coord and state of n pixels to the left.
 
     Args:
@@ -97,14 +96,14 @@ cdef int dither_lookahead(Dither* dither, float[:, :, ::1] palette_cam16, float[
     cdef float total_error
     cdef unsigned char next_pixels
     cdef int phase
+    cdef float[::1] lah_cam16ucs
 
     # Don't bother dithering past the lookahead horizon or edge of screen.
     cdef int xxr = min(x + lookahead, x_res)
+
     cdef int lah_shape1 = xxr - x
     cdef int lah_shape2 = 3
-    # XXX use a memoryview
     cdef float *lah_image_rgb = <float *> malloc(lah_shape1 * lah_shape2 * sizeof(float))
-    cdef float[::1] lah_cam16ucs
 
     # For each 2**lookahead possibilities for the on/off state of the next lookahead pixels, apply error diffusion
     # and compute the total squared error to the source image.  Since we only have two possible colours for each
@@ -135,7 +134,8 @@ cdef int dither_lookahead(Dither* dither, float[:, :, ::1] palette_cam16, float[
             apply_one_line(dither, xl, xr, j, lah_image_rgb, lah_shape2, quant_error)
 
             lah_cam16ucs = convert_rgb_to_cam16ucs(
-                rgb_to_cam16ucs, lah_image_rgb[j*lah_shape2], lah_image_rgb[j*lah_shape2+1], lah_image_rgb[j*lah_shape2+2])
+                rgb_to_cam16ucs, lah_image_rgb[j*lah_shape2], lah_image_rgb[j*lah_shape2+1],
+                lah_image_rgb[j*lah_shape2+2])
             total_error += colour_distance_squared(lah_cam16ucs, palette_cam16[next_pixels, phase])
 
             if total_error >= best_error:
@@ -208,10 +208,6 @@ cdef void apply(Dither* dither, int x_res, int y_res, int x, int y, float[:,:,::
     cdef int xr = dither_bounds_xr(dither, x_res, x)
 
     cdef float error_fraction
-    # We could avoid clipping here, i.e. allow RGB values to extend beyond
-    # 0..255 to capture a larger range of residual error.  This is faster
-    # but seems to reduce image quality.
-    # TODO: is this still true?
     for i in range(yt, yb):
         for j in range(xl, xr):
             error_fraction = dither.pattern[(i - y) * dither.x_shape + j - x + dither.x_origin]
@@ -297,8 +293,7 @@ def dither_image(screen, float[:, :, ::1] image_rgb, dither, int lookahead, unsi
         for j in range(cdither.x_shape):
             cdither.pattern[i * cdither.x_shape + j] = dither.PATTERN[i, j]
 
-    cdef (unsigned char)[:, ::1] image_nbit = np.empty(
-        (image_rgb.shape[0], image_rgb.shape[1]), dtype=np.uint8)
+    cdef (unsigned char)[:, ::1] image_nbit = np.empty((image_rgb.shape[0], image_rgb.shape[1]), dtype=np.uint8)
 
     for y in range(yres):
         if verbose:
