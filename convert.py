@@ -85,9 +85,9 @@ def main():
                         gamma=args.gamma_correct)).astype(np.float32) / 255
 
     dither = dither_pattern.PATTERNS[args.dither]()
-    output_nbit, _ = dither_pyx.dither_image(
+    bitmap = dither_pyx.dither_image(
         screen, rgb, dither, lookahead, args.verbose, rgb_to_cam16)
-    bitmap = screen.pack(output_nbit)
+    screen.pack(bitmap)
 
     # Show output image by rendering in target palette
     output_palette_name = args.show_palette or args.palette

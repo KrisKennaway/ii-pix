@@ -23,16 +23,8 @@ class DHGRScreen:
 
         return 1024 * c + 128 * b + 40 * a
 
-    def _image_to_bitmap(self, image_nbit: np.ndarray) -> np.ndarray:
-        """Converts n-bit image to 2-bit image bitmap.
-
-        Each n-bit colour value maps to a sliding window of n successive pixels.
-        """
-        raise NotImplementedError
-
-    def pack(self, image: np.ndarray):
+    def pack(self, bitmap: np.ndarray):
         """Packs an image into memory format (8k AUX + 8K MAIN)."""
-        bitmap = self._image_to_bitmap(image)
         # The DHGR display encodes 7 pixels across interleaved 4-byte sequences
         # of AUX and MAIN memory, as follows:
         # PBBBAAAA PDDCCCCB PFEEEEDD PGGGGFFF
@@ -55,8 +47,7 @@ class DHGRScreen:
             addr = self.y_to_base_addr(y)
             self.aux[addr:addr + 40] = aux_col[y, :]
             self.main[addr:addr + 40] = main_col[y, :]
-
-        return bitmap
+        return
 
     def bitmap_to_image_rgb(self, bitmap: np.ndarray) -> np.ndarray:
         """Convert our 2-bit bitmap image into a RGB image.
@@ -76,33 +67,9 @@ class DHGRScreen:
         return image_rgb
 
 
-class DHGR560Screen(DHGRScreen):
-    """DHGR screen including colour fringing and 4 pixel chroma bleed."""
-
-    def _image_to_bitmap(self, image_nbit: np.ndarray) -> np.ndarray:
-        bitmap = np.zeros((self.Y_RES, self.X_RES), dtype=np.bool)
-        for y in range(self.Y_RES):
-            for x in range(self.X_RES):
-                pixel = image_nbit[y, x]
-                dots = self.palette.DOTS[pixel]
-                phase = x % 4
-                bitmap[y, x] = dots[phase]
-        return bitmap
-
-
 # TODO: refactor to share implementation with DHGR560Screen
 class DHGR560NTSCScreen(DHGRScreen):
     """DHGR screen including colour fringing and 8 pixel chroma bleed."""
-
-    # XXX image_nbit is MSB (x, ... x-7) LSB pixel values?
-
-    def _image_to_bitmap(self, image_nbit: np.ndarray) -> np.ndarray:
-        bitmap = np.zeros((self.Y_RES, self.X_RES), dtype=np.bool)
-        for y in range(self.Y_RES):
-            for x in range(self.X_RES):
-                pixel = image_nbit[y, x]
-                bitmap[y, x] = pixel >> 7
-        return bitmap
 
     # TODO: unify with parent
     def bitmap_to_image_rgb(self, bitmap: np.ndarray) -> np.ndarray:

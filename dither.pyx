@@ -217,6 +217,19 @@ cdef void apply(Dither* dither, int x_res, int y_res, int x, int y, float[:,:,::
                 image[i,j,k] = clip(image[i,j,k] + error_fraction * quant_error[k], 0, 1)
 
 
+@cython.boundscheck(False)
+@cython.wraparound(False)
+cdef image_nbit_to_bitmap(
+    (unsigned char)[:, ::1] image_nbit, unsigned int x_res, unsigned int y_res, unsigned char palette_depth):
+    cdef unsigned int x, y
+    bitmap = np.zeros((y_res, x_res), dtype=bool)
+    for y in range(y_res):
+        for x in range(x_res):
+            # MSB of each array element is the pixel state at (x, y)
+            bitmap[y, x] = image_nbit[y, x] >> (palette_depth - 1)
+    return bitmap
+
+
 # Dither a source image
 #
 # Args:
@@ -303,4 +316,4 @@ def dither_image(
                 image_rgb[y, x, i] = output_pixel_rgb[i]
 
     free(cdither.pattern)
-    return image_nbit, np.array(image_rgb)
+    return image_nbit_to_bitmap(image_nbit, xres, yres, palette_depth)
