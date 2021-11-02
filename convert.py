@@ -67,6 +67,8 @@ def main():
         screen = screen_py.DHGR560NTSCScreen(palette)
     else:
         screen = screen_py.DHGR560Screen(palette)
+    if args.lookahead < 1:
+        parser.error('--lookahead must be at least 1')
     lookahead = args.lookahead
 
     # Conversion matrix from RGB to CAM16UCS colour values.  Indexed by
