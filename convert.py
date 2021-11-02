@@ -60,12 +60,11 @@ def main():
         help='Gamma-correct image by this value (default: 2.4)'
     )
     args = parser.parse_args()
+    if args.lookahead < 1:
+        parser.error('--lookahead must be at least 1')
 
     palette = palette_py.PALETTES[args.palette]()
     screen = screen_py.DHGRScreen(palette)
-    if args.lookahead < 1:
-        parser.error('--lookahead must be at least 1')
-    lookahead = args.lookahead
 
     # Conversion matrix from RGB to CAM16UCS colour values.  Indexed by
     # 24-bit RGB value
@@ -82,12 +81,10 @@ def main():
 
     dither = dither_pattern.PATTERNS[args.dither]()
     bitmap = dither_pyx.dither_image(
-        screen, rgb, dither, lookahead, args.verbose, rgb_to_cam16)
-    screen.pack(bitmap)
+        screen, rgb, dither, args.lookahead, args.verbose, rgb_to_cam16)
 
     # Show output image by rendering in target palette
-    output_palette_name = args.show_palette or args.palette
-    output_palette = palette_py.PALETTES[output_palette_name]()
+    output_palette = palette_py.PALETTES[args.show_palette or args.palette]()
     output_screen = screen_py.DHGRScreen(output_palette)
     # TODO: if output_palette_name == "ntsc" show bitmap_to_image_ntsc instead
     output_rgb = output_screen.bitmap_to_image_rgb(bitmap)
@@ -102,6 +99,7 @@ def main():
     # Save Double hi-res image
     outfile = os.path.join(os.path.splitext(args.output)[0] + "-preview.png")
     out_image.save(outfile, "PNG")
+    screen.pack(bitmap)
     with open(args.output, "wb") as f:
         f.write(bytes(screen.aux))
         f.write(bytes(screen.main))
