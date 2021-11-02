@@ -50,23 +50,23 @@ cdef int dither_bounds_yb(Dither *dither, int y_res, int y) nogil:
     return yb
 
 
-cdef inline unsigned char lookahead_pixels(
-        unsigned char last_pixel_nbit, unsigned int next_pixels, int lookahead) nogil:
-    """Compute all possible n-bit palette values for upcoming pixels, given x coord and state of n pixels to the left.
+cdef inline unsigned char shift_pixel_window(
+        unsigned char last_pixels,
+        unsigned int next_pixels,
+        unsigned char shift_right_by,
+        unsigned char window_width) nogil:
+    """Right-shift a sliding window of n pixels to incorporate new pixels.
 
     Args:
-        XXX
-        screen: python screen.Screen object
-        lookahead: how many pixels to lookahead
-        last_pixel_nbit: n-bit value representing n pixels to left of current position, which determine available
-            colours.
-        x: current x position
+        last_pixels: n-bit value representing n pixels from left up to current position (MSB = current pixel).
+        next_pixels: n-bit value representing n pixels to right of current position (LSB = pixel to right)
+        shift_right_by: how many pixels of next_pixels to shift into the sliding window
+        window_width: how many pixels to maintain in the sliding window (must be <= 8)
 
-    Returns: matrix of size (2**lookahead, lookahead) containing all 2**lookahead possible vectors of n-bit palette
-        values accessible at positions x .. x + lookahead
+    Returns: n-bit value representing shifted pixel window
     """
-    # XXX palette bit depth
-    return (last_pixel_nbit >> (lookahead+1)) | (next_pixels << (8 - (lookahead + 1)))
+    cdef unsigned char window_mask = 0xff >> (8 - window_width)
+    return ((last_pixels >> shift_right_by) | (next_pixels << (8 - shift_right_by))) & window_mask
 
 
 # Look ahead a number of pixels and compute choice for next pixel with lowest total squared error after dithering.
@@ -88,7 +88,7 @@ cdef inline unsigned char lookahead_pixels(
 @cython.wraparound(False)
 cdef int dither_lookahead(Dither* dither, float[:, :, ::1] palette_cam16, float[:, :, ::1] palette_rgb,
         float[:, :, ::1] image_rgb, int x, int y, int lookahead, unsigned char last_pixels,
-        int x_res, float[:,::1] rgb_to_cam16ucs) nogil:
+        int x_res, float[:,::1] rgb_to_cam16ucs, unsigned char palette_depth) nogil:
     cdef int i, j, k
     cdef float[3] quant_error
     cdef int best
@@ -122,7 +122,8 @@ cdef int dither_lookahead(Dither* dither, float[:, :, ::1] palette_cam16, float[
             xr = dither_bounds_xr(dither, xxr - x, j)
             phase = (x + j) % 4
 
-            next_pixels = lookahead_pixels(last_pixels, next_pixels=i, lookahead=j)
+            next_pixels = shift_pixel_window(
+                    last_pixels, next_pixels=i, shift_right_by=j+1, window_width=palette_depth)
 
             # We don't update the input at position x (since we've already chosen
             # fixed outputs), but we do propagate quantization errors to positions >x
@@ -159,7 +160,7 @@ cdef inline float[::1] convert_rgb_to_cam16ucs(float[:, ::1] rgb_to_cam16ucs, fl
 @cython.boundscheck(False)
 @cython.wraparound(False)
 cdef inline float colour_distance_squared(float[::1] colour1, float[::1] colour2) nogil:
-    return (colour1[0] - colour2[0])**2 + (colour1[1] - colour2[1])**2 + (colour1[2] - colour2[2])**2
+    return (colour1[0] - colour2[0]) ** 2 + (colour1[1] - colour2[1]) ** 2 + (colour1[2] - colour2[2]) ** 2
 
 
 # Perform error diffusion to a single image row.
@@ -293,6 +294,12 @@ def dither_image(screen, float[:, :, ::1] image_rgb, dither, int lookahead, unsi
         for j in range(cdither.x_shape):
             cdither.pattern[i * cdither.x_shape + j] = dither.PATTERN[i, j]
 
+    cdef unsigned char palette_depth = screen.palette.PALETTE_DEPTH
+
+    # The nbit image representation contains the trailing n dot values as an n-bit value with MSB representing the
+    # current pixel.  This choice (cf LSB) is slightly awkward but matches the DHGR behaviour that bit positions in
+    # screen memory map LSB to MSB from L to R.  The value of n is chosen by the palette depth, i.e. how many trailing
+    # dot positions are used to determine the colour of a given pixel.
     cdef (unsigned char)[:, ::1] image_nbit = np.empty((image_rgb.shape[0], image_rgb.shape[1]), dtype=np.uint8)
 
     for y in range(yres):
@@ -308,9 +315,11 @@ def dither_image(screen, float[:, :, ::1] image_rgb, dither, int lookahead, unsi
                 # Apply error diffusion for each of these 2**N choices, and compute which produces the closest match
                 # to the source image over the succeeding N pixels
                 best_next_pixels = dither_lookahead(
-                        &cdither, palette_cam16, palette_rgb, image_rgb, x, y, lookahead, output_pixel_nbit, xres, rgb_to_cam16ucs)
+                        &cdither, palette_cam16, palette_rgb, image_rgb, x, y, lookahead, output_pixel_nbit, xres,
+                        rgb_to_cam16ucs, palette_depth)
                 # Apply best choice for next 1 pixel
-                output_pixel_nbit = lookahead_pixels(output_pixel_nbit, best_next_pixels, lookahead=0)
+                output_pixel_nbit = shift_pixel_window(
+                        output_pixel_nbit, best_next_pixels, shift_right_by=1, window_width=palette_depth)
             #else:
             #    # Choose the closest colour among the available n-bit palette options
             #    palette_choices_nbit = screen.pixel_palette_options(output_pixel_nbit, x)
