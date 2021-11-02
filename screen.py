@@ -52,10 +52,8 @@ class DHGRScreen:
     def bitmap_to_image_rgb(self, bitmap: np.ndarray) -> np.ndarray:
         """Convert our 2-bit bitmap image into a RGB image.
 
-        XXX
-        Colour at every pixel is determined by the value of a 8-bit sliding
-        window indexed by x % 4, which gives the index into our 256-colour RGB
-        palette.
+        Colour at every pixel is determined by the value of an n-bit sliding
+        window and x % 4, which give the index into our RGB palette.
         """
         image_rgb = np.empty((self.Y_RES, self.X_RES, 3), dtype=np.uint8)
         for y in range(self.Y_RES):
