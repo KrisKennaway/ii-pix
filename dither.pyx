@@ -232,7 +232,8 @@ cdef void apply(Dither* dither, int x_res, int y_res, int x, int y, float[:,:,::
 @cython.wraparound(False)
 def dither_image(
         screen, float[:, :, ::1] image_rgb, dither, int lookahead, unsigned char verbose, float[:,::1] rgb_to_cam16ucs):
-    cdef int y, x, i, j, k
+    cdef int y, x
+    cdef unsigned char i, j, pixels_nbit, phase
     # cdef float[3] input_pixel_rgb
     cdef float[3] quant_error
     cdef unsigned char output_pixel_nbit
@@ -246,14 +247,14 @@ def dither_image(
 
     # TODO: convert this instead of storing on palette?
     cdef float[:, :, ::1] palette_cam16 = np.zeros((len(screen.palette.CAM16UCS), 4, 3), dtype=np.float32)
-    for i, j in screen.palette.CAM16UCS.keys():
-        for k in range(3):
-            palette_cam16[i, j, k] = screen.palette.CAM16UCS[i, j][k]
+    for pixels_nbit, phase in screen.palette.CAM16UCS.keys():
+        for i in range(3):
+            palette_cam16[pixels_nbit, phase, i] = screen.palette.CAM16UCS[pixels_nbit, phase][i]
 
     cdef float[:, :, ::1] palette_rgb = np.zeros((len(screen.palette.RGB), 4, 3), dtype=np.float32)
-    for i, j in screen.palette.RGB.keys():
-        for k in range(3):
-            palette_rgb[i, j, k] = screen.palette.RGB[i, j][k] / 255
+    for pixels_nbit, phase in screen.palette.RGB.keys():
+        for i in range(3):
+            palette_rgb[pixels_nbit, phase, i] = screen.palette.RGB[pixels_nbit, phase][i] / 255
 
     cdef Dither cdither
     cdither.y_shape = dither.PATTERN.shape[0]
