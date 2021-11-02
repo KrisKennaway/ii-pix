@@ -41,16 +41,6 @@ def main():
         '--show-output', action=argparse.BooleanOptionalAction, default=True,
         help="Whether to show the output image after conversion.")
     parser.add_argument(
-        '--resolution', type=str, choices=("140", "560"), default="560",
-        help=("Effective double hi-res resolution to target.  '140' treats "
-              "pixels in groups of 4, with 16 colours that are chosen "
-              "independently, and ignores NTSC fringing.  This is mostly only "
-              "useful for comparison to other 140px converters.  '560' treats "
-              "each pixel individually, with choice of 2 colours (depending on "
-              "NTSC colour phase), and looking ahead over next --lookahead "
-              "pixels to optimize the colour sequence (default: 560)")
-    )
-    parser.add_argument(
         '--palette', type=str, choices=list(set(palette_py.PALETTES.keys())),
         default=palette_py.DEFAULT_PALETTE,
         help='RGB colour palette to dither to.  "ntsc" blends colours over 8 '
@@ -72,19 +62,12 @@ def main():
     args = parser.parse_args()
 
     palette = palette_py.PALETTES[args.palette]()
-    if args.resolution == "140":
-        if args.palette == "ntsc":
-            raise argparse.ArgumentError(
-                "--resolution=140 cannot be combined with --palette=ntsc")
-        screen = screen_py.DHGR140Screen(palette)
-        lookahead = 0
+    if args.palette == "ntsc":
+        # TODO: palette depth should be controlled by Palette not Screen
+        screen = screen_py.DHGR560NTSCScreen(palette)
     else:
-        if args.palette == "ntsc":
-            # TODO: palette depth should be controlled by Palette not Screen
-            screen = screen_py.DHGR560NTSCScreen(palette)
-        else:
-            screen = screen_py.DHGR560Screen(palette)
-        lookahead = args.lookahead
+        screen = screen_py.DHGR560Screen(palette)
+    lookahead = args.lookahead
 
     # Conversion matrix from RGB to CAM16UCS colour values.  Indexed by
     # 24-bit RGB value
@@ -93,7 +76,7 @@ def main():
     # Open and resize source image
     image = image_py.open(args.input)
     if args.show_input:
-        image_py.resize(image, screen.NATIVE_X_RES, screen.NATIVE_Y_RES * 2,
+        image_py.resize(image, screen.X_RES, screen.Y_RES * 2,
                         srgb_output=True).show()
     rgb = np.array(
         image_py.resize(image, screen.X_RES, screen.Y_RES,
@@ -114,8 +97,8 @@ def main():
     output_rgb = output_screen.bitmap_to_image_rgb(bitmap)
     out_image = Image.fromarray(image_py.linear_to_srgb(output_rgb).astype(
         np.uint8))
-    out_image = image_py.resize(out_image, screen.NATIVE_X_RES,
-                                screen.NATIVE_Y_RES * 2, srgb_output=True)
+    out_image = image_py.resize(out_image, screen.X_RES, screen.Y_RES * 2,
+                                srgb_output=True)
 
     if args.show_output:
         out_image.show()
