@@ -25,11 +25,31 @@ class Palette:
                 self.CAM16UCS[k] = colour.convert(
                     v / 255, "sRGB", "CAM16UCS").astype(np.float32)
 
-    def pixels_to_idx(self, pixels: np.array) -> int:
+    def _pixel_phase_shifts(self, phase_0_rgb):
+        rgb_phases = {}
+        for pixels, rgb in phase_0_rgb.items():
+            rgb_phases[pixels, 0] = rgb
+            for phase in range(1, 4):
+                msb = pixels & (1 << (self.PALETTE_DEPTH - 1))
+                pixels <<= 1 | (msb >> (self.PALETTE_DEPTH - 1))
+                rgb_phases[pixels, phase] = rgb
+        return rgb_phases
+
+    def bitmap_to_idx(self, pixels: np.array) -> int:
+        """Converts a bitmap of pixels into integer representation.
+
+        Args:
+            pixels: 1-D array of booleans, representing a window of pixels from
+              L to R.  Must be of size <= 8
+
+        Returns:
+            8-bit integer representation of pixels, suitable for use as an
+            index into palette arrays
+        """
         return np.packbits(
             # numpy uses big-endian representation which is the opposite
             # order to screen representation (i.e. LSB is the left-most
-            # screen pixel)
+            # screen pixel), so we need to flip the order
             np.flip(pixels, axis=0)
         )[0]
 

@@ -59,13 +59,13 @@ class DHGRScreen:
         """
         image_rgb = np.empty((self.Y_RES, self.X_RES, 3), dtype=np.uint8)
         for y in range(self.Y_RES):
-            pixels = [False] * self.palette.PALETTE_DEPTH
+            bitmap_window = [False] * self.palette.PALETTE_DEPTH
             for x in range(self.X_RES):
                 # Maintain a sliding window of pixels of width PALETTE_DEPTH
-                pixels = pixels[1:] + [bitmap[y, x]]
+                bitmap_window = bitmap_window[1:] + [bitmap[y, x]]
                 image_rgb[y, x, :] = self.palette.RGB[
-                    self.palette.pixels_to_idx(
-                        np.array(pixels, dtype=bool)), x % 4]
+                    self.palette.bitmap_to_idx(
+                        np.array(bitmap_window, dtype=bool)), x % 4]
         return image_rgb
 
     @staticmethod
