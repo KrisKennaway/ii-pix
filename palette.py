@@ -51,7 +51,7 @@ class Palette:
     @staticmethod
     def _pixel_phase_shifts(phase_3_srgb):
         """Constructs dictionary of 4-bit pixel sequences for each NTSC phase.
-        Assumes PALETTE_DEPTH == 3
+        Assumes PALETTE_DEPTH == 4
 
         Args:
             phase_3_rgb: dict mapping 4-bit pixel sequence to sRGB values,
