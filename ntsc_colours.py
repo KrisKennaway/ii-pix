@@ -31,7 +31,7 @@ def main():
             bitmap[0, j:j + 8] = bits8
 
             # bitmap_to_ntsc produces 3 output pixels for each DHGR input
-            ntsc = s.bitmap_to_ntsc(bitmap)
+            ntsc = s.bitmap_to_image_ntsc(bitmap)
             last_colour = ntsc[0, 3 * (j + 8) - 1, :]
             colours[(bits, j - ntsc_shift)] = last_colour
             unique.add(tuple(last_colour))

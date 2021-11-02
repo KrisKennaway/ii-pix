@@ -62,11 +62,7 @@ def main():
     args = parser.parse_args()
 
     palette = palette_py.PALETTES[args.palette]()
-    if args.palette == "ntsc":
-        # TODO: palette depth should be controlled by Palette not Screen
-        screen = screen_py.DHGR560NTSCScreen(palette)
-    else:
-        screen = screen_py.DHGR560Screen(palette)
+    screen = screen_py.DHGRScreen(palette)
     if args.lookahead < 1:
         parser.error('--lookahead must be at least 1')
     lookahead = args.lookahead
@@ -92,10 +88,8 @@ def main():
     # Show output image by rendering in target palette
     output_palette_name = args.show_palette or args.palette
     output_palette = palette_py.PALETTES[output_palette_name]()
-    if output_palette_name == "ntsc":
-        output_screen = screen_py.DHGR560NTSCScreen(output_palette)
-    else:
-        output_screen = screen_py.DHGR560Screen(output_palette)
+    output_screen = screen_py.DHGRScreen(output_palette)
+    # TODO: if output_palette_name == "ntsc" show bitmap_to_image_ntsc instead
     output_rgb = output_screen.bitmap_to_image_rgb(bitmap)
     out_image = Image.fromarray(image_py.linear_to_srgb(output_rgb).astype(
         np.uint8))

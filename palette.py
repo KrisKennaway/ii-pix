@@ -10,7 +10,6 @@ class Palette:
     SRGB = None
     RGB = {}
     CAM16UCS = {}
-    # DOTS_TO_INDEX = {}
 
     # How many successive screen pixels are used to compute output pixel 
     # palette index.
@@ -25,18 +24,6 @@ class Palette:
             with colour.utilities.suppress_warnings(colour_usage_warnings=True):
                 self.CAM16UCS[k] = colour.convert(
                     v / 255, "sRGB", "CAM16UCS").astype(np.float32)
-
-        # # Maps palette values to screen dots.  Note that these are the same as
-        # # the binary index values in reverse order.
-        # _DOTS = {}
-        # for i in range(1 << self.PALETTE_DEPTH):
-        #     _DOTS[i] = tuple(
-        #         bool(i & (1 << j)) for j in range(self.PALETTE_DEPTH))
-        #
-        # # Reverse mapping from screen dots to palette index.
-        # self.DOTS_TO_INDEX = {}
-        # for k, v in _DOTS.items():
-        #     self.DOTS_TO_INDEX[v] = k
 
     def pixels_to_idx(self, pixels: np.array) -> int:
         return np.packbits(

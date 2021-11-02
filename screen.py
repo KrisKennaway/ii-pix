@@ -52,29 +52,7 @@ class DHGRScreen:
     def bitmap_to_image_rgb(self, bitmap: np.ndarray) -> np.ndarray:
         """Convert our 2-bit bitmap image into a RGB image.
 
-        Colour at every pixel is determined by the value of a 4-bit sliding
-        window indexed by x % 4, which gives the index into our 16-colour RGB
-        palette.
-        """
-        image_rgb = np.empty((self.Y_RES, self.X_RES, 3),
-                             dtype=np.uint8)
-        for y in range(self.Y_RES):
-            pixel = [False, False, False, False]
-            for x in range(self.X_RES):
-                pixel[x % 4] = bitmap[y, x]
-                dots = self.palette.DOTS_TO_INDEX[tuple(pixel)]
-                image_rgb[y, x, :] = self.palette.RGB[dots]
-        return image_rgb
-
-
-# TODO: refactor to share implementation with DHGR560Screen
-class DHGR560NTSCScreen(DHGRScreen):
-    """DHGR screen including colour fringing and 8 pixel chroma bleed."""
-
-    # TODO: unify with parent
-    def bitmap_to_image_rgb(self, bitmap: np.ndarray) -> np.ndarray:
-        """Convert our 2-bit bitmap image into a RGB image.
-
+        XXX
         Colour at every pixel is determined by the value of a 8-bit sliding
         window indexed by x % 4, which gives the index into our 256-colour RGB
         palette.
@@ -83,8 +61,8 @@ class DHGR560NTSCScreen(DHGRScreen):
         for y in range(self.Y_RES):
             pixels = [False] * self.palette.PALETTE_DEPTH
             for x in range(self.X_RES):
+                # Maintain a sliding window of pixels of width PALETTE_DEPTH
                 pixels = pixels[1:] + [bitmap[y, x]]
-                # dots = self.palette.DOTS_TO_INDEX[tuple(pixel)]
                 image_rgb[y, x, :] = self.palette.RGB[
                     self.palette.pixels_to_idx(
                         np.array(pixels, dtype=bool)), x % 4]
@@ -106,7 +84,7 @@ class DHGR560NTSCScreen(DHGRScreen):
 
         return 1 if line[pos] else 0
 
-    def bitmap_to_ntsc(self, bitmap: np.ndarray) -> np.ndarray:
+    def bitmap_to_image_ntsc(self, bitmap: np.ndarray) -> np.ndarray:
         y_width = 12
         u_width = 24
         v_width = 24
