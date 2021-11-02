@@ -79,14 +79,15 @@ class DHGR560NTSCScreen(DHGRScreen):
         window indexed by x % 4, which gives the index into our 256-colour RGB
         palette.
         """
-        image_rgb = np.empty((self.Y_RES, self.X_RES, 3),
-                             dtype=np.uint8)
+        image_rgb = np.empty((self.Y_RES, self.X_RES, 3), dtype=np.uint8)
         for y in range(self.Y_RES):
-            pixel = [False, False, False, False, False, False, False, False]
+            pixels = [False] * self.palette.PALETTE_DEPTH
             for x in range(self.X_RES):
-                pixel = pixel[1:] + [bitmap[y, x]]
-                dots = self.palette.DOTS_TO_INDEX[tuple(pixel)]
-                image_rgb[y, x, :] = self.palette.RGB[dots, x % 4]
+                pixels = pixels[1:] + [bitmap[y, x]]
+                # dots = self.palette.DOTS_TO_INDEX[tuple(pixel)]
+                image_rgb[y, x, :] = self.palette.RGB[
+                    self.palette.pixels_to_idx(
+                        np.array(pixels, dtype=bool)), x % 4]
         return image_rgb
 
     @staticmethod

@@ -7,11 +7,10 @@ import palette_ntsc
 
 
 class Palette:
-    RGB = {}
     SRGB = None
+    RGB = {}
     CAM16UCS = {}
-    DOTS = {}
-    DOTS_TO_INDEX = {}
+    # DOTS_TO_INDEX = {}
 
     # How many successive screen pixels are used to compute output pixel 
     # palette index.
@@ -19,6 +18,7 @@ class Palette:
 
     def __init__(self):
         self.RGB = {}
+        # XXX RGB and CAM16UCS should be indexed by (pixels_nbit, phase)
         for k, v in self.SRGB.items():
             self.RGB[k] = (np.clip(image.srgb_to_linear_array(v / 255), 0.0,
                                    1.0) * 255).astype(np.uint8)
@@ -26,16 +26,25 @@ class Palette:
                 self.CAM16UCS[k] = colour.convert(
                     v / 255, "sRGB", "CAM16UCS").astype(np.float32)
 
-        # Maps palette values to screen dots.  Note that these are the same as
-        # the binary index values in reverse order.
-        for i in range(1 << self.PALETTE_DEPTH):
-            self.DOTS[i] = tuple(
-                bool(i & (1 << j)) for j in range(self.PALETTE_DEPTH))
+        # # Maps palette values to screen dots.  Note that these are the same as
+        # # the binary index values in reverse order.
+        # _DOTS = {}
+        # for i in range(1 << self.PALETTE_DEPTH):
+        #     _DOTS[i] = tuple(
+        #         bool(i & (1 << j)) for j in range(self.PALETTE_DEPTH))
+        #
+        # # Reverse mapping from screen dots to palette index.
+        # self.DOTS_TO_INDEX = {}
+        # for k, v in _DOTS.items():
+        #     self.DOTS_TO_INDEX[v] = k
 
-        # Reverse mapping from screen dots to palette index.
-        self.DOTS_TO_INDEX = {}
-        for k, v in self.DOTS.items():
-            self.DOTS_TO_INDEX[v] = k
+    def pixels_to_idx(self, pixels: np.array) -> int:
+        return np.packbits(
+            # numpy uses big-endian representation which is the opposite
+            # order to screen representation (i.e. LSB is the left-most
+            # screen pixel)
+            np.flip(pixels, axis=0)
+        )[0]
 
 
 class ToHgrPalette(Palette):
