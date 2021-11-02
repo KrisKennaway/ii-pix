@@ -1,10 +1,9 @@
-"""Precompute CIE2000 perceptual colour distance matrices.
+"""Precompute CAM16-UCS colour tuples for all 2^24 RGB tuples.
 
-XXX
-The matrix of delta-E values is computed for all pairs of 24-bit RGB values,
-and Apple II target palette values.  This is written out as a file that is
-mmapped at runtime for efficient access.  For a 16-colour target palette this
-file is 256MB; for a 256-colour (NTSC) target palette it is 4GB.
+This 192MB data file is used to convert from RGB to CAM16-UCS colour space
+for purposes of computing (approximate) perceptual difference between pairs of
+colours when optimizing the image conversion (since this perceptual
+difference corresponds to the Euclidean distance in this colour space)
 """
 
 import colour
