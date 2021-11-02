@@ -1,5 +1,6 @@
 """Representation of Apple II screen memory."""
 
+import math
 import numpy as np
 import palette as palette_py
 
@@ -84,51 +85,49 @@ class DHGRScreen:
 
     def bitmap_to_image_ntsc(self, bitmap: np.ndarray) -> np.ndarray:
         y_width = 12
-        u_width = 24
-        v_width = 24
+        i_width = 24
+        q_width = 24
 
         contrast = 1
-        # TODO: where does this come from?  OpenEmulator looks like it should
-        #  use a value of 1.0 by default.
-        saturation = 2
-        # Fudge factor to make colours line up with OpenEmulator
-        # TODO: where does this come from - is it due to the band-pass
-        #  filtering they do?
-        hue = -0.3
+        saturation = 1
+        # DHGR has a timing shift of 1/4 phase, i.e x=0 is actually 1/4 phase.
+        # XXX should use (x + 1) % 4 ?
+        hue = math.pi / 2
 
         # Apply effect of saturation
-        yuv_to_rgb = np.array(
+        yiq_to_rgb = np.array(
             ((1, 0, 0), (0, saturation, 0), (0, 0, saturation)), dtype=np.float)
         # Apply hue phase rotation
-        yuv_to_rgb = np.matmul(np.array(
+        yiq_to_rgb = np.matmul(np.array(
             ((1, 0, 0), (0, np.cos(hue), np.sin(hue)), (0, -np.sin(hue),
                                                         np.cos(hue)))),
-            yuv_to_rgb)
-        # Y'UV to R'G'B' conversion
-        yuv_to_rgb = np.matmul(np.array(
-            ((1, 0, 1.13983), (1, -0.39465, -.58060), (1, 2.03211, 0))),
-            yuv_to_rgb)
+            yiq_to_rgb)
+        # Y'IQ to R'G'B' conversion
+        yiq_to_rgb = np.matmul(np.array(
+            ((1, 0.956, 0.621), (1, -0.272, -.647), (1, -1.107, 1.704))),
+            yiq_to_rgb)
+
         # Apply effect of contrast
-        yuv_to_rgb *= contrast
+        yiq_to_rgb *= contrast
 
         out_rgb = np.empty((bitmap.shape[0], bitmap.shape[1] * 3, 3),
                            dtype=np.uint8)
         for y in range(bitmap.shape[0]):
             ysum = 0
-            usum = 0
-            vsum = 0
+            isum = 0
+            qsum = 0
             line = np.repeat(bitmap[y], 3)
 
             for x in range(bitmap.shape[1] * 3):
                 ysum += self._read(line, x) - self._read(line, x - y_width)
-                usum += self._read(line, x) * self._sin(x) - self._read(
-                    line, x - u_width) * self._sin((x - u_width))
-                vsum += self._read(line, x) * self._cos(x) - self._read(
-                    line, x - v_width) * self._cos((x - v_width))
+                isum += self._read(line, x) * self._sin(x) - self._read(
+                    line, x - i_width) * self._sin((x - i_width))
+                qsum += self._read(line, x) * self._cos(x) - self._read(
+                    line, x - q_width) * self._cos((x - q_width))
                 rgb = np.matmul(
-                    yuv_to_rgb, np.array(
-                        (ysum / y_width, usum / u_width,
-                         vsum / v_width)).reshape((3, 1))).reshape(3)
+                    yiq_to_rgb, np.array(
+                        (ysum / y_width, isum / i_width,
+                         qsum / q_width)).reshape((3, 1))).reshape(3)
                 r = min(255, max(0, rgb[0] * 255))
                 g = min(255, max(0, rgb[1] * 255))
                 b = min(255, max(0, rgb[2] * 255))

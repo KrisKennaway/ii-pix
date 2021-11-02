@@ -19,8 +19,7 @@ def main():
     # pixel, using NTSC emulation.
     # Double Hi-Res has a timing shift that rotates the displayed bits one
     # position with respect to NTSC phase.
-    # TODO: should be 3?  Do I have a compensating off-by-one in bitmap_to_ntsc?
-    ntsc_shift = 2
+    ntsc_shift = 1
     for j in range(ntsc_shift, ntsc_shift + 4):
         bitmap = np.zeros((1, 11 + ntsc_shift), dtype=bool)
         for bits in range(256):

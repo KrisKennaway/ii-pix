@@ -84,14 +84,17 @@ def main():
         screen, rgb, dither, args.lookahead, args.verbose, rgb_to_cam16)
 
     # Show output image by rendering in target palette
-    output_palette = palette_py.PALETTES[args.show_palette or args.palette]()
+    output_palette_name = args.show_palette or args.palette
+    output_palette = palette_py.PALETTES[output_palette_name]()
     output_screen = screen_py.DHGRScreen(output_palette)
-    # TODO: if output_palette_name == "ntsc" show bitmap_to_image_ntsc instead
-    output_rgb = output_screen.bitmap_to_image_rgb(bitmap)
-    out_image = Image.fromarray(image_py.linear_to_srgb(output_rgb).astype(
-        np.uint8))
-    out_image = image_py.resize(out_image, screen.X_RES, screen.Y_RES * 2,
-                                srgb_output=True)
+    if output_palette_name == "ntsc":
+        output_srgb = output_screen.bitmap_to_image_ntsc(bitmap)
+    else:
+        output_srgb = image_py.linear_to_srgb(
+            output_screen.bitmap_to_image_rgb(bitmap).astype(np.uint8))
+    out_image = image_py.resize(
+        Image.fromarray(output_srgb), screen.X_RES, screen.Y_RES * 2,
+        srgb_output=True)
 
     if args.show_output:
         out_image.show()
