@@ -1,5 +1,6 @@
 import numpy as np
 
+# Indexed by (trailing 8-bit dot pattern, x % 4)
 SRGB = {
   (0, 0): np.array((0, 0, 0)),
   (1, 0): np.array((0, 37, 0)),
