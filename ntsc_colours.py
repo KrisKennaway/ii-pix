@@ -6,7 +6,7 @@ import screen
 
 
 def main():
-    s = screen.DHGR560NTSCScreen(palette=None)
+    s = screen.DHGRScreen(palette=None)
 
     colours = {}
     unique = set()
@@ -22,9 +22,9 @@ def main():
     # TODO: should be 3?  Do I have a compensating off-by-one in bitmap_to_ntsc?
     ntsc_shift = 2
     for j in range(ntsc_shift, ntsc_shift + 4):
-        bitmap = np.zeros((1, 11 + ntsc_shift), dtype=np.bool)
+        bitmap = np.zeros((1, 11 + ntsc_shift), dtype=bool)
         for bits in range(256):
-            bits8 = np.empty((8,), dtype=np.bool)
+            bits8 = np.empty((8,), dtype=bool)
             for i in range(8):
                 bits8[i] = bits & (1 << i)
 
