@@ -91,7 +91,7 @@ def main():
         output_srgb = output_screen.bitmap_to_image_ntsc(bitmap)
     else:
         output_srgb = image_py.linear_to_srgb(
-            output_screen.bitmap_to_image_rgb(bitmap).astype(np.uint8))
+            output_screen.bitmap_to_image_rgb(bitmap)).astype(np.uint8)
     out_image = image_py.resize(
         Image.fromarray(output_srgb), screen.X_RES, screen.Y_RES * 2,
         srgb_output=True)
