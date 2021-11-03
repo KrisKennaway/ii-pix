@@ -66,7 +66,13 @@ cdef inline unsigned char shift_pixel_window(
     Returns: n-bit value representing shifted pixel window
     """
     cdef unsigned char window_mask = 0xff >> (8 - window_width)
-    return ((last_pixels >> shift_right_by) | (next_pixels << (window_width - shift_right_by))) & window_mask
+    cdef unsigned int shifted_next_pixels
+
+    if window_width > shift_right_by:
+        shifted_next_pixels = next_pixels << (window_width - shift_right_by)
+    else:
+        shifted_next_pixels = next_pixels >> (shift_right_by - window_width)
+    return ((last_pixels >> shift_right_by) | shifted_next_pixels) & window_mask
 
 
 # Look ahead a number of pixels and compute choice for next pixel with lowest total squared error after dithering.
