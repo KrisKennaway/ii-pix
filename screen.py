@@ -80,54 +80,57 @@ class DHGRScreen:
     def _read(self, line, pos):
         if pos < 0:
             return 0
-
         return 1 if line[pos] else 0
 
     def bitmap_to_image_ntsc(self, bitmap: np.ndarray) -> np.ndarray:
         y_width = 12
-        i_width = 24
-        q_width = 24
+        u_width = 24
+        v_width = 24
 
         contrast = 1
-        saturation = 1
-        # DHGR has a timing shift of 1/4 phase, i.e x=0 is actually 1/4 phase.
-        # XXX should use (x + 1) % 4 ?
-        hue = math.pi / 2
+        # TODO: This is necessary to match OpenEmulator.  I think it is because
+        #  they introduce an extra (unexplained) factor of 2 when applying the
+        #  Chebyshev/Lanczos filtering to the u and v components.
+        saturation = 2
+        # TODO: this phase shift is necessary to match OpenEmulator.  I'm not
+        #  sure where it comes from - e.g. it doesn't match the phaseInfo
+        #  calculation for the signal phase at the start of the visible region.
+        hue = 0.2 * (2 * np.pi)
 
         # Apply effect of saturation
-        yiq_to_rgb = np.array(
+        yuv_to_rgb = np.array(
             ((1, 0, 0), (0, saturation, 0), (0, 0, saturation)), dtype=np.float)
         # Apply hue phase rotation
-        yiq_to_rgb = np.matmul(np.array(
+        yuv_to_rgb = np.matmul(np.array(
             ((1, 0, 0), (0, np.cos(hue), np.sin(hue)), (0, -np.sin(hue),
                                                         np.cos(hue)))),
-            yiq_to_rgb)
-        # Y'IQ to R'G'B' conversion
-        yiq_to_rgb = np.matmul(np.array(
-            ((1, 0.956, 0.621), (1, -0.272, -.647), (1, -1.107, 1.704))),
-            yiq_to_rgb)
+            yuv_to_rgb)
+        # Y'UV to R'G'B' conversion
+        yuv_to_rgb = np.matmul(np.array(
+            ((1, 0, 1.139883), (1, -0.394642, -.5806227), (1, 2.032062, 0))),
+            yuv_to_rgb)
 
         # Apply effect of contrast
-        yiq_to_rgb *= contrast
+        yuv_to_rgb *= contrast
 
         out_rgb = np.empty((bitmap.shape[0], bitmap.shape[1] * 3, 3),
                            dtype=np.uint8)
         for y in range(bitmap.shape[0]):
             ysum = 0
-            isum = 0
-            qsum = 0
+            usum = 0
+            vsum = 0
             line = np.repeat(bitmap[y], 3)
 
             for x in range(bitmap.shape[1] * 3):
                 ysum += self._read(line, x) - self._read(line, x - y_width)
-                isum += self._read(line, x) * self._sin(x) - self._read(
-                    line, x - i_width) * self._sin((x - i_width))
-                qsum += self._read(line, x) * self._cos(x) - self._read(
-                    line, x - q_width) * self._cos((x - q_width))
+                usum += self._read(line, x) * self._sin(x) - self._read(
+                    line, x - u_width) * self._sin((x - u_width))
+                vsum += self._read(line, x) * self._cos(x) - self._read(
+                    line, x - v_width) * self._cos((x - v_width))
                 rgb = np.matmul(
-                    yiq_to_rgb, np.array(
-                        (ysum / y_width, isum / i_width,
-                         qsum / q_width)).reshape((3, 1))).reshape(3)
+                    yuv_to_rgb, np.array(
+                        (ysum / y_width, usum / u_width,
+                         vsum / v_width)).reshape((3, 1))).reshape(3)
                 r = min(255, max(0, rgb[0] * 255))
                 g = min(255, max(0, rgb[1] * 255))
                 b = min(255, max(0, rgb[2] * 255))
