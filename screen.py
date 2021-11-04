@@ -109,7 +109,6 @@ class DHGRScreen:
         yuv_to_rgb = np.matmul(np.array(
             ((1, 0, 1.139883), (1, -0.394642, -.5806227), (1, 2.032062, 0))),
             yuv_to_rgb)
-
         # Apply effect of contrast
         yuv_to_rgb *= contrast
 
