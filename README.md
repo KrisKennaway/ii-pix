@@ -5,10 +5,11 @@
 ## Installation
 
 Requires:
-*  python 3.x
-*  [numpy](http://numpy.org/)
-*  [cython](https://cython.org/)
-*  [colour-science](https://www.colour-science.org/)
+* python 3.x
+* [numpy](http://numpy.org/)
+* [cython](https://cython.org/)
+* [Pillow](https://python-pillow.org/)
+* [colour-science](https://www.colour-science.org/)
 
 To build ][-pix, run the following commands:
 
@@ -16,18 +17,16 @@ To build ][-pix, run the following commands:
 # Compile cython code
 python setup.py build_ext --inplace
 
-# Precompute colour distance matrix for one/all colour palettes
-python precompute_distance.py --all  # or --palette <palette>
+# Precompute RGB/CAM16-UCS colour conversion matrix, used as part of image optimization
+python precompute_conversion.py
 ```
-
-NOTE: Building all distance matrices requires 4.75GB of free disk space!
 
 ## Usage
 
 Then, to convert an image, the simplest usage is:
 
 ```buildoutcfg
-python convert.py <input> <output.dhr>
+python convert.py --palette ntsc <input> <output.dhr>
 ```
 
 `<output.dhr>` contains the double-hires image data in a form suitable for transfer to an Apple II disk image.  The 16k output consists of 8k AUX data first, 8K MAIN data second (this matches the output format of other DHGR image converters).  i.e. if loaded at 0x2000, the contents of 0x2000..0x3fff should be moved to 0x4000..0x5fff in AUX memory, and the image can be viewed on DHGR page 2.
@@ -164,7 +163,7 @@ In the particular case of DHGR this algorithm runs into difficulties, because ea
 
 We can deal with this by looking ahead N pixels (8 by default) for each image position (x,y), and computing the effect of choosing all 2^N combinations of these N-pixel states on the dithered source image.
 
-Specifically, for a fixed choice of one of these N pixel sequences, we tentatively perform the error diffusion as normal on a copy of the image, and compute the total mean squared distance from the (fixed) N-pixel sequence to the error-diffused source image.  For the perceptual colour distance metric we use [CIE2000 delta-E](https://en.wikipedia.org/wiki/Color_difference#CIEDE2000).
+Specifically, for a fixed choice of one of these N pixel sequences, we tentatively perform the error diffusion as normal on a copy of the image, and compute the total mean squared distance from the (fixed) N-pixel sequence to the error-diffused source image.  To compute the perceptual difference between colours we convert to the perceptually uniform [CAM16-UCS](https://en.wikipedia.org/wiki/Color_appearance_model#CAM16) colour space in which perceptual distance is Euclidean. 
 
 Finally, we pick the N-pixel sequence with the lowest total error, and select the first pixel of this N-pixel sequence for position (x,y).  We then perform error diffusion as usual for this single pixel, and proceed to x+1.
 
@@ -178,11 +177,15 @@ Most digital images are encoded using the [sRGB colour space](https://en.wikiped
 
 The process of (error-diffusion) dithering involves distributing the "quantization error" (mismatch between the colour of the source image and chosen output pixels) across neighbouring pixels, according to some pattern.  [Floyd-Steinberg](https://en.wikipedia.org/wiki/Floyd%E2%80%93Steinberg_dithering) and [Jarvis-Judice-Ninke](https://en.wikipedia.org/wiki/Error_diffusion#minimized_average_error) ("Jarvis") are two common patterns, though there are many others, which have slightly different characteristics.
 
-For our particular application it turns out that these "classical" approaches do not give especially good results.  This seems to be because they only propagate errors to a small number of neighbouring pixels, e.g. 2 pixels in the forward x direction for Jarvis.  However for double hi-res colours we know that it might take up to 4 pixels before a given colour can be selected for output (e.g. to alternate between black and white, or any other pairs that are 4 steps away on the transition chart above).
+Since it uses a small dither pattern, Floyd-Steinberg dithering retains more of the image detail than larger kernels.  On the other hand, it sometimes produces image artifacts that are highly structured (e.g. runs of a single colour, checkerboard patterns).  This seems to be especially common with 4-pixel colours.
 
-In other words, given the results of error diffusion from our current pixel, there is one colour from our palette of 16 that is the best one to match this - but it might be only possible to render this particular colour up to 4 pixels further on.  If we only diffuse the errors by 1 or 2 pixels each time, it will tend to have diffused away by the time we reach that position, and the opportunity will be lost.
+In part this may be because these "classical" dither patterns only propagate errors to a small number of neighbouring pixels, e.g. 1 pixels in the forward direction for Floyd-Steinberg, and 2 pixels for Jarvis.  However for double hi-res colours we know that it might take up to 4 pixels before a given colour can be selected for output (e.g. to alternate between black and white, or any other pairs that are 4 steps away on the transition chart above).
 
-Modifying the Jarvis dither pattern to extend 4 pixels in the forward direction seems to give much better results (e.g. when dithering large blocks of colour).  This is presumably because we allow each quantization error to diffuse to each of the 4 subsequent pixels that might be best-placed to act on it.  This is the default dither pattern for ][-pix (`--dither=jarvis-mod`)
+In other words, given the results of error diffusion from our current pixel, there is one colour from our palette of 16 that is the best one to match this - but it might be only possible to render this particular colour up to 4 pixels further on.  If we only diffuse the errors by 1 or 2 pixels each time, it will tend to have diffused away by the time we reach that position, and the opportunity will be lost.  Combined with the small overall set of available colours this can result in image artifacts.
+
+Modifying the Jarvis dither pattern to extend 4 pixels in the forward direction seems to give much better results for such images (e.g. when dithering large blocks of colour), although at the cost of reduced detail.  This is presumably because we allow each quantization error to diffuse to each of the 4 subsequent pixels that might be best-placed to act on it.
+
+The bottom line is that choice of `--dither` argument is a tradeoff between image detail and handling of colour.  If the default `--dither=floyd` algorithm does not give pleasing results, try other patterns such as `--dither=jarvis-mod`.
 
 Further experimentation with other dithering patterns (and similar modifications to the above) may also produce interesting results.
 
@@ -209,9 +212,7 @@ Existing conversion tools (see below) tend to support a variety of RGB palette v
 
 ## Precomputing distance matrix
 
-Computing the CIE2000 distance between two RGB colour values is fairly expensive, since the [formula](https://en.wikipedia.org/wiki/Color_difference#CIEDE2000) is complex. We deal with this by precomputing a matrix from all 256^3 integer RGB values to all RGB values in the target palette. This matrix is generated on disk by the `precompute_distance.py` utility, and is mmapped at runtime for efficient access.
-
-For a 4-bit colour palette the file is 256MB; for the 8-bit NTSC colour palette it is 4GB!  Image dithering is also correspondingly slower (especially if the file cannot be mmapped completely into memory and must be demand-paged).
+The mapping from RGB colour space to CAM16-UCS is quite complex, so to avoid this runtime cost we precompute a matrix from all 256^3 integer RGB values to corresponding CAM16-UCS values. This 192MB matrix is generated by the `precompute_conversion.py` utility, and is loaded at runtime for efficient access.
 
 # Comparison to other DHGR image converters
 
@@ -227,7 +228,7 @@ For a 4-bit colour palette the file is 256MB; for the 8-bit NTSC colour palette 
 
 *  Apart from ignoring DHGR colour interactions, the 140px converted images are also lower than ideal resolution since they do not make use of the ability to address all 560px independently.
 
-*  The perceptual colour distance metric used to match the best colour to an input pixel is a custom metric based on a weighted sum of Euclidean sRGB distance and Rec.601 luma value.  It's not explained why this particular metric was chosen, and in practise it seems to often give much lower quality results than CIE2000 (though the latter is much slower to compute - which is why we precompute the distance matrix ahead of time)
+*  The perceptual colour distance metric used to match the best colour to an input pixel is a custom metric based on a weighted sum of Euclidean sRGB distance and Rec.601 luma value.  It's not explained why this particular metric was chosen, and in practise it seems to often give much lower quality results than modern perceptually uniform colour spaces like CIE2000 or CAM16-UCS (though these are much slower to compute - which is why we precompute the conversion matrix ahead of time)
 
 * It does not perform RGB colour space conversions before dithering, i.e. if the input image is in sRGB colour space (as most digital images will be) then the dithering is also performed in sRGB.  Since sRGB is not a linear colour space, the effect of dithering is to distribute errors non-linearly, which distorts the brightness of the resulting image.
 
@@ -239,7 +240,7 @@ For a 4-bit colour palette the file is 256MB; for the 8-bit NTSC colour palette 
 
 *  supports additional (custom) dither modes (partly out of necessity due to the custom "colour block" model)
 
-*  Supports a variety of perceptual colour distance metrics including CIE2000 and the one bmp2dhr uses.  In practise I'm not sure the others are useful since CIE2000 is the most recent refinement of much research on this topic, and is the most accurate.
+*  Supports a variety of perceptual colour distance metrics including CIE2000 and the one bmp2dhr uses.  In practise I'm not sure the others are useful since CIE2000 is the more recent refinement of much research on this topic, and is the most accurate of them.
 
 * like bmp2dhr, only supports BMP source images in a particular format.
 
@@ -304,15 +305,10 @@ The difference in treatment of NTSC artifacts is much more visible when using an
 
 The following images were generated with a palette matching the one used by Virtual II  (`--palette=virtualii` for ][-pix)
 
-### ][-pix (Preview image)
+### ][-pix
 
 ![original source image](examples/groundhog-original.png)
 ![ii-pix preview](examples/groundhog-iipix-virtualii-preview.png)
-
-### ][-pix (Virtual II screenshot)
-
-![original source image](examples/groundhog-original.png)
-![ii-pix preview](examples/groundhog-iipix-virtualii.png)
 
 ### bmp2dhr
 
@@ -349,4 +345,6 @@ Detail and colour balance is much improved.
 
 * Hi-res will require more care, since the 560 pixel display is not individually dot addressible.  In particular the behaviour of the "palette bit" (which shifts a group of 7 dots to the right by 1) is another optimization constraint.  In practise a similar lookahead algorithm should work well though.
 
-* I would like to be able to find an ordered dithering algorithm that works well for Apple II graphics.  Ordered dithering specifically avoids diffusing errors arbitrarily across the image, which produces visual noise (and unnecessary deltas) when combined with animation.  For example such a thing may work well with my II-Vision video streamer.  However the properties of NTSC artifact colour seem to be in conflict with these requirements, i.e. pixel changes *always* propagate colour to some extent.
+* I would like to be able to find an ordered dithering algorithm that works well for Apple II graphics.  Ordered dithering specifically avoids diffusing errors arbitrarily across the image, which produces visual noise (and unnecessary deltas) when combined with animation.  For example such a thing may work well with my [II-Vision](https://github.com/KrisKennaway/ii-vision) video streamer.  However the properties of NTSC artifact colour seem to be in conflict with these requirements, i.e. pixel changes *always* propagate colour to some extent.
+
+![me](examples/kris-iipix-openemulator.png)

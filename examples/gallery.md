@@ -3,9 +3,9 @@
 Here are some more images converted with ][-pix.
 
 * (top-left) original image
-* (top-right) image converted for display in Virtual II emulator (converted with `--palette virtualii --lookahead 8`)
-* (bottom-left) OpenEmulator screenshot of image converted with 8-pixel colour (converted with `--palette ntsc --lookahead 8`)
-* (bottom-left) OpenEmulator screenshot of image converted with 4-pixel colour (converted with `--palette openemulator --lookahead 8`)
+* (top-right) image converted for display in Virtual II emulator (converted with `--palette virtualii --lookahead 8 --dither jarvis-mod`)
+* (bottom-left) OpenEmulator screenshot of image converted with 8-pixel colour (converted with `--palette ntsc --lookahead 8 --dither floyd`)
+* (bottom-right) OpenEmulator screenshot of image converted with 4-pixel colour (converted with `--palette openemulator --lookahead 8 --dither jarvis-mod`)
 
 | ![Bonnet Macaque - original](macaque-original.png) | ![Bonnet Macaque - Virtual II](macaque-iipix-virtualii-preview.png) |
 |---|---|
