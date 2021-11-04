@@ -358,6 +358,8 @@ Initial release
 * Significantly improved conversion performance
 * Switched from using CIE2000 delta-E perceptual distance metric to Euclidean distance in CAM16-UCS space.  Image quality is improved, it requires much less precomputed memory (192MB cf 4GB for the 8-pixel colour mode!) and is much faster at runtime.  Win-win-win!
 * Removed support for 140px conversions since these were only useful to show why this is not the right approach to DHGR
+* Add support for modifying gamma correction, which is sometimes useful for tweaking results with very bright or dark source images.
+* Switch default to --dither=floyd, which seems to produce the best results with --palette=ntsc
 * Various internal code simplifications and cleanups
 
 ![me](examples/kris-iipix-openemulator.png)
