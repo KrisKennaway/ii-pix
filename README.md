@@ -347,4 +347,17 @@ Detail and colour balance is much improved.
 
 * I would like to be able to find an ordered dithering algorithm that works well for Apple II graphics.  Ordered dithering specifically avoids diffusing errors arbitrarily across the image, which produces visual noise (and unnecessary deltas) when combined with animation.  For example such a thing may work well with my [II-Vision](https://github.com/KrisKennaway/ii-vision) video streamer.  However the properties of NTSC artifact colour seem to be in conflict with these requirements, i.e. pixel changes *always* propagate colour to some extent.
 
+# Version history
+
+## v1.0 (2021-03-15)
+
+Initial release
+
+## v1.1 (2021-11-05)
+
+* Significantly improved conversion performance
+* Switched from using CIE2000 delta-E perceptual distance metric to Euclidean distance in CAM16-UCS space.  Image quality is improved, it requires much less precomputed memory (192MB cf 4GB for the 8-pixel colour mode!) and is much faster at runtime.  Win-win-win!
+* Removed support for 140px conversions since these were only useful to show why this is not the right approach to DHGR
+* Various internal code simplifications and cleanups
+
 ![me](examples/kris-iipix-openemulator.png)
