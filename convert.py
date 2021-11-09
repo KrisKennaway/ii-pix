@@ -21,14 +21,11 @@ import screen as screen_py
 # - support LR/DLR
 # - support HGR
 
-def _to_pixel(float_array):
-    return tuple(np.clip(float_array.astype(np.uint8), 0, 255))
 
-
-def cluster_palette(image: Image, rgb_to_cam16):
+def cluster_palette(image: Image):
     colours_rgb = np.asarray(image).reshape((-1, 3))
     with colour.utilities.suppress_warnings(colour_usage_warnings=True):
-        colours_cam = colour.convert(colours_rgb / 255, "RGB",
+        colours_cam = colour.convert(colours_rgb, "RGB",
                                      "CAM16UCS").astype(np.float32)
 
     kmeans = KMeans(n_clusters=16, max_iter=10000)
@@ -41,10 +38,8 @@ def cluster_palette(image: Image, rgb_to_cam16):
         palette_rgb = np.clip(np.round(palette_rgb * 16).astype(np.uint32) *
                               16, 0, 255)
         palette_rgb = palette_rgb.astype(np.float32) / 255
+    return palette_rgb
 
-    return dither_pyx.dither_shr(
-        np.asarray(image).astype(np.float32) / 255, palette_rgb, rgb_to_cam16)
-    return working_image
 
 
 def main():
@@ -106,8 +101,8 @@ def main():
         image_py.resize(image, screen.X_RES, screen.Y_RES,
                         gamma=args.gamma_correct)).astype(np.float32) / 255
 
-    output_rgb = cluster_palette(Image.fromarray((rgb * 255).astype(
-        np.uint8)), rgb_to_cam16)
+    palette_rgb = cluster_palette(rgb)
+    output_rgb = dither_pyx.dither_shr(rgb, palette_rgb, rgb_to_cam16)
     output_srgb = image_py.linear_to_srgb(output_rgb).astype(np.uint8)
 
     # dither = dither_pattern.PATTERNS[args.dither]()
