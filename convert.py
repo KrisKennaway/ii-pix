@@ -26,18 +26,21 @@ def _to_pixel(float_array):
 
 
 def cluster_palette(image: Image, rgb_to_cam16):
-    # TODO: only 4-bit RGB colour channels
     colours_rgb = np.asarray(image).reshape((-1, 3))
     with colour.utilities.suppress_warnings(colour_usage_warnings=True):
         colours_cam = colour.convert(colours_rgb / 255, "RGB",
                                      "CAM16UCS").astype(np.float32)
 
-    kmeans = KMeans(n_clusters=16)
+    kmeans = KMeans(n_clusters=16, max_iter=10000)
     kmeans.fit_predict(colours_cam)
     palette_cam = kmeans.cluster_centers_
     with colour.utilities.suppress_warnings(colour_usage_warnings=True):
-        palette_rgb = colour.convert(palette_cam, "CAM16UCS", "RGB").astype(
-            np.float32)
+        palette_rgb = colour.convert(palette_cam, "CAM16UCS", "RGB")
+        # SHR colour palette only uses 4-bit values
+        # TODO: do this more carefully
+        palette_rgb = np.clip(np.round(palette_rgb * 16).astype(np.uint32) *
+                              16, 0, 255)
+        palette_rgb = palette_rgb.astype(np.float32) / 255
 
     return dither_pyx.dither_shr(
         np.asarray(image).astype(np.float32) / 255, palette_rgb, rgb_to_cam16)
