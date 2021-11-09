@@ -328,16 +328,18 @@ import colour
 
 @cython.boundscheck(False)
 @cython.wraparound(False)
-def dither_shr(float[:, :, ::1] working_image, float[:, ::1] palette_rgb, float[:,::1] rgb_to_cam16ucs):
+def dither_shr(float[:, :, ::1] working_image, object palettes_rgb, float[:,::1] rgb_to_cam16ucs):
     cdef int y, x, idx, best_colour_idx
     cdef float best_distance, distance
     cdef float[::1] best_colour_rgb, pixel_cam, colour_rgb, colour_cam
     cdef float[3] quant_error
+    cdef float[:, ::1] palette_rgb
 
     cdef (unsigned char)[:, ::1] output_4bit = np.zeros((200, 320), dtype=np.uint8)
 
-    for y in range(200):
+    for y in range(192):
         print(y)
+        palette_rgb = palettes_rgb[y // 12]
         for x in range(320):
             pixel_cam = convert_rgb_to_cam16ucs(
                 rgb_to_cam16ucs, working_image[y, x, 0], working_image[y, x, 1], working_image[y, x, 2])
