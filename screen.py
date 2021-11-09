@@ -5,6 +5,11 @@ import numpy as np
 import palette as palette_py
 
 
+class SHR320Screen:
+    X_RES = 320
+    Y_RES = 200
+
+
 class DHGRScreen:
     X_RES = 560
     Y_RES = 192
