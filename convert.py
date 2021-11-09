@@ -34,11 +34,9 @@ def cluster_palette(image: Image):
     with colour.utilities.suppress_warnings(colour_usage_warnings=True):
         palette_rgb = colour.convert(palette_cam, "CAM16UCS", "RGB")
         # SHR colour palette only uses 4-bit values
-        # TODO: do this more carefully
-        palette_rgb = np.clip(np.round(palette_rgb * 16).astype(np.uint32) *
-                              16, 0, 255)
-        palette_rgb = palette_rgb.astype(np.float32) / 255
-    return palette_rgb
+        palette_rgb = np.round(palette_rgb * 15) / 15
+        # palette_rgb = palette_rgb.astype(np.float32) / 255
+    return palette_rgb.astype(np.float32)
 
 
 
@@ -96,13 +94,21 @@ def main():
     image = image_py.open(args.input)
     if args.show_input:
         image_py.resize(image, screen.X_RES, screen.Y_RES,
-                        srgb_output=True).show()
+                        srgb_output=False).show()
     rgb = np.array(
         image_py.resize(image, screen.X_RES, screen.Y_RES,
-                        gamma=args.gamma_correct)).astype(np.float32) / 255
+                        gamma=args.gamma_correct, srgb_output=True)).astype(
+        np.float32) / 255
 
     palette_rgb = cluster_palette(rgb)
-    output_rgb = dither_pyx.dither_shr(rgb, palette_rgb, rgb_to_cam16)
+    # print(palette_rgb)
+    # screen.set_palette(0, (image_py.linear_to_srgb_array(palette_rgb) *
+    #                        15).astype(np.uint8))
+    screen.set_palette(0, (np.round(palette_rgb * 15)).astype(np.uint8))
+
+    output_4bit = dither_pyx.dither_shr(rgb, palette_rgb, rgb_to_cam16)
+    screen.set_pixels(output_4bit)
+    output_rgb = (palette_rgb[output_4bit] * 255).astype(np.uint8)
     output_srgb = image_py.linear_to_srgb(output_rgb).astype(np.uint8)
 
     # dither = dither_pattern.PATTERNS[args.dither]()
@@ -120,18 +126,20 @@ def main():
     #         output_screen.bitmap_to_image_rgb(bitmap)).astype(np.uint8)
     out_image = image_py.resize(
         Image.fromarray(output_srgb), screen.X_RES, screen.Y_RES,
-        srgb_output=True)
+        srgb_output=False)  # XXX true
 
     if args.show_output:
         out_image.show()
 
     # Save Double hi-res image
-    # outfile = os.path.join(os.path.splitext(args.output)[0] + "-preview.png")
-    # out_image.save(outfile, "PNG")
-    # screen.pack(bitmap)
+    outfile = os.path.join(os.path.splitext(args.output)[0] + "-preview.png")
+    out_image.save(outfile, "PNG")
+    screen.pack()
     # with open(args.output, "wb") as f:
     #     f.write(bytes(screen.aux))
     #     f.write(bytes(screen.main))
+    with open(args.output, "wb") as f:
+        f.write(bytes(screen.memory))
 
 
 if __name__ == "__main__":

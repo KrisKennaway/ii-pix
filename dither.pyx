@@ -329,10 +329,12 @@ import colour
 @cython.boundscheck(False)
 @cython.wraparound(False)
 def dither_shr(float[:, :, ::1] working_image, float[:, ::1] palette_rgb, float[:,::1] rgb_to_cam16ucs):
-    cdef int y, x, idx
+    cdef int y, x, idx, best_colour_idx
     cdef float best_distance, distance
     cdef float[::1] best_colour_rgb, pixel_cam, colour_rgb, colour_cam
     cdef float[3] quant_error
+
+    cdef (unsigned char)[:, ::1] output_4bit = np.zeros((200, 320), dtype=np.uint8)
 
     for y in range(200):
         print(y)
@@ -341,12 +343,15 @@ def dither_shr(float[:, :, ::1] working_image, float[:, ::1] palette_rgb, float[
                 rgb_to_cam16ucs, working_image[y, x, 0], working_image[y, x, 1], working_image[y, x, 2])
 
             best_distance = 1e9
+            best_colour_idx = 0
             for idx, colour_rgb in enumerate(palette_rgb):
                 colour_cam = convert_rgb_to_cam16ucs(rgb_to_cam16ucs, colour_rgb[0], colour_rgb[1], colour_rgb[2])
                 distance = colour_distance_squared(pixel_cam, colour_cam)
                 if distance < best_distance:
                     best_distance = distance
                     best_colour_rgb = colour_rgb
+                    best_colour_idx = idx
+            output_4bit[y, x] = best_colour_idx
 
             for i in range(3):
                 quant_error[i] = working_image[y, x, i] - best_colour_rgb[i]
@@ -359,14 +364,63 @@ def dither_shr(float[:, :, ::1] working_image, float[:, ::1] palette_rgb, float[
                     working_image[y, x + 1, i] = clip(
                         working_image[y, x + 1, i] + quant_error[i] * (7 / 16), 0, 1)
                 if y < 199:
+                    if x > 0:
+                        working_image[y + 1, x - 1, i] = clip(
+                            working_image[y + 1, x - 1, i] + quant_error[i] * (3 / 16), 0,
+                            1)
                     working_image[y + 1, x, i] = clip(
                         working_image[y + 1, x, i] + quant_error[i] * (5 / 16), 0, 1)
                     if x < 319:
                         working_image[y + 1, x + 1, i] = clip(
                             working_image[y + 1, x + 1, i] + quant_error[i] * (1 / 16),
                             0, 1)
-                    if x > 0:
-                        working_image[y + 1, x - 1, i] = clip(
-                            working_image[y + 1, x - 1, i] + quant_error[i] * (3 / 16), 0,
-                            1)
-    return np.array(working_image).astype(np.float32) * 255
+
+#                # 0 0 X 7 5
+#                # 3 5 7 5 3
+#                # 1 3 5 3 1
+#                if x < 319:
+#                    working_image[y, x + 1, i] = clip(
+#                        working_image[y, x + 1, i] + quant_error[i] * (7 / 48), 0, 1)
+#                if x < 318:
+#                    working_image[y, x + 2, i] = clip(
+#                        working_image[y, x + 2, i] + quant_error[i] * (5 / 48), 0, 1)
+#                if y < 199:
+#                    if x > 1:
+#                        working_image[y + 1, x - 2, i] = clip(
+#                            working_image[y + 1, x - 2, i] + quant_error[i] * (3 / 48), 0,
+#                            1)
+#                    if x > 0:
+#                        working_image[y + 1, x - 1, i] = clip(
+#                            working_image[y + 1, x - 1, i] + quant_error[i] * (5 / 48), 0,
+#                            1)
+#                    working_image[y + 1, x, i] = clip(
+#                        working_image[y + 1, x, i] + quant_error[i] * (7 / 48), 0, 1)
+#                    if x < 319:
+#                        working_image[y + 1, x + 1, i] = clip(
+#                            working_image[y + 1, x + 1, i] + quant_error[i] * (5 / 48),
+#                            0, 1)
+#                    if x < 318:
+#                        working_image[y + 1, x + 2, i] = clip(
+#                            working_image[y + 1, x + 2, i] + quant_error[i] * (3 / 48),
+#                            0, 1)
+#                if y < 198:
+#                    if x > 1:
+#                        working_image[y + 2, x - 2, i] = clip(
+#                            working_image[y + 2, x - 2, i] + quant_error[i] * (1 / 48), 0,
+#                            1)
+#                    if x > 0:
+#                        working_image[y + 2, x - 1, i] = clip(
+#                            working_image[y + 2, x - 1, i] + quant_error[i] * (3 / 48), 0,
+#                            1)
+#                    working_image[y + 2, x, i] = clip(
+#                        working_image[y + 2, x, i] + quant_error[i] * (5 / 48), 0, 1)
+#                    if x < 319:
+#                        working_image[y + 2, x + 1, i] = clip(
+#                            working_image[y + 2, x + 1, i] + quant_error[i] * (3 / 48),
+#                            0, 1)
+#                    if x < 318:
+#                        working_image[y + 2, x + 2, i] = clip(
+#                            working_image[y + 2, x + 2, i] + quant_error[i] * (1 / 48),
+#                            0, 1)
+
+    return np.array(output_4bit, dtype=np.uint8)
