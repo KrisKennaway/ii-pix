@@ -1,6 +1,7 @@
 """Image converter to Apple II Double Hi-Res format."""
 
 import argparse
+import array
 import os.path
 import time
 
@@ -24,49 +25,22 @@ def _to_pixel(float_array):
     return tuple(np.clip(float_array.astype(np.uint8), 0, 255))
 
 
-def cluster_palette(image: Image):
-    # TODO: cluster in CAM16-UCS space
-    colours = np.asarray(image).reshape((-1, 3))
+def cluster_palette(image: Image, rgb_to_cam16):
+    # TODO: only 4-bit RGB colour channels
+    colours_rgb = np.asarray(image).reshape((-1, 3))
+    with colour.utilities.suppress_warnings(colour_usage_warnings=True):
+        colours_cam = colour.convert(colours_rgb / 255, "RGB",
+                                     "CAM16UCS").astype(np.float32)
+
     kmeans = KMeans(n_clusters=16)
-    kmeans.fit_predict(colours)
-    palette = kmeans.cluster_centers_
+    kmeans.fit_predict(colours_cam)
+    palette_cam = kmeans.cluster_centers_
+    with colour.utilities.suppress_warnings(colour_usage_warnings=True):
+        palette_rgb = colour.convert(palette_cam, "CAM16UCS", "RGB").astype(
+            np.float32)
 
-    pal_image = Image.new('P', (1, 1), 0)
-    pal_image.putpalette(palette.reshape(-1).astype(np.uint8))
-
-    working_image = np.asarray(image).astype(np.float32)
-    for y in range(200):
-        print(y)
-        for x in range(320):
-            pixel = working_image[y, x]
-
-            best_distance = 1e9
-            best_colour = None
-            for colour in palette:
-                distance = np.sum(np.power(colour - pixel, 2))
-                if distance < best_distance:
-                    best_distance = distance
-                    best_colour = colour
-            quant_error = pixel - best_colour
-
-            # Floyd-Steinberg dither
-            # 0 * 7
-            # 3 5 1
-            working_image[y, x] = best_colour
-            if x < 319:
-                working_image[y, x + 1] = np.clip(
-                    working_image[y, x + 1] + quant_error * (7 / 16), 0, 255)
-            if y < 199:
-                working_image[y + 1, x] = np.clip(
-                    working_image[y + 1, x] + quant_error * (5 / 16), 0, 255)
-                if x < 319:
-                    working_image[y + 1, x + 1] = np.clip(
-                        working_image[y + 1, x + 1] + quant_error * (1 / 16),
-                        0, 255)
-                if x > 0:
-                    working_image[y + 1, x - 1] = np.clip(
-                        working_image[y + 1, x - 1] + quant_error * (3 / 16), 0,
-                        255)
+    return dither_pyx.dither_shr(
+        np.asarray(image).astype(np.float32) / 255, palette_rgb, rgb_to_cam16)
     return working_image
 
 
@@ -129,7 +103,8 @@ def main():
         image_py.resize(image, screen.X_RES, screen.Y_RES,
                         gamma=args.gamma_correct)).astype(np.float32) / 255
 
-    output_rgb = cluster_palette(Image.fromarray((rgb * 255).astype(np.uint8)))
+    output_rgb = cluster_palette(Image.fromarray((rgb * 255).astype(
+        np.uint8)), rgb_to_cam16)
     output_srgb = image_py.linear_to_srgb(output_rgb).astype(np.uint8)
 
     # dither = dither_pattern.PATTERNS[args.dither]()
