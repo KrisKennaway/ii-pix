@@ -4,6 +4,8 @@ import argparse
 import array
 import os.path
 import time
+import collections
+import random
 
 import colour
 from PIL import Image
@@ -23,15 +25,27 @@ import screen as screen_py
 
 
 def cluster_palette(image: Image):
+    shuffle_lines = list(range(200))
+    random.shuffle(shuffle_lines)
+    line_to_palette = {}
+    for idx, line in enumerate(shuffle_lines):
+        line_to_palette[line] = idx % 16
+
     colours_rgb = np.asarray(image).reshape((-1, 3))
     with colour.utilities.suppress_warnings(colour_usage_warnings=True):
         colours_cam = colour.convert(colours_rgb, "RGB",
                                      "CAM16UCS").astype(np.float32)
 
     palettes_rgb = {}
+    palette_colours = collections.defaultdict(list)
+    for line in range(200):
+        palette = line_to_palette[line]
+        palette_colours[palette].extend(
+            colours_cam[line * 320:(line + 1) * 320])
+
     for palette in range(16):
         kmeans = KMeans(n_clusters=16, max_iter=10000)
-        kmeans.fit_predict(colours_cam[palette*320*12:(palette+1)*320*12])
+        kmeans.fit_predict(palette_colours[palette])
         palette_cam = kmeans.cluster_centers_
         with colour.utilities.suppress_warnings(colour_usage_warnings=True):
             palette_rgb = colour.convert(palette_cam, "CAM16UCS", "RGB")
@@ -39,8 +53,7 @@ def cluster_palette(image: Image):
             palette_rgb = np.round(palette_rgb * 15) / 15
             # palette_rgb = palette_rgb.astype(np.float32) / 255
             palettes_rgb[palette] = palette_rgb.astype(np.float32)
-    return palettes_rgb
-
+    return palettes_rgb, line_to_palette
 
 
 def main():
@@ -103,22 +116,22 @@ def main():
                         gamma=args.gamma_correct, srgb_output=True)).astype(
         np.float32) / 255
 
-    palettes_rgb = cluster_palette(rgb)
+    palettes_rgb, line_to_palette = cluster_palette(rgb)
     # print(palette_rgb)
     # screen.set_palette(0, (image_py.linear_to_srgb_array(palette_rgb) *
     #                        15).astype(np.uint8))
     for i, p in palettes_rgb.items():
         screen.set_palette(i, (np.round(p * 15)).astype(np.uint8))
 
-    output_4bit = dither_pyx.dither_shr(rgb, palettes_rgb, rgb_to_cam16)
+    output_4bit = dither_pyx.dither_shr(rgb, palettes_rgb, rgb_to_cam16,
+                                        line_to_palette)
     screen.set_pixels(output_4bit)
-    for i in range(200):
-        screen.line_palette[i] = i // 12
     output_rgb = np.zeros((200, 320, 3), dtype=np.uint8)
-    for i, p in palettes_rgb.items():
-        output_rgb[i*12:(i+1)*12, :, :] = (p[output_4bit[i*12:(i+1)*12,
-                                            :]] * 255).astype(
-            np.uint8)
+    for i in range(200):
+        screen.line_palette[i] = line_to_palette[i]
+        output_rgb[i, :, :] = (
+                    palettes_rgb[line_to_palette[i]][
+                        output_4bit[i, :]] * 255).astype(np.uint8)
     output_srgb = image_py.linear_to_srgb(output_rgb).astype(np.uint8)
 
     # dither = dither_pattern.PATTERNS[args.dither]()
