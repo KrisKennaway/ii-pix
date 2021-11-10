@@ -23,13 +23,29 @@ import screen as screen_py
 # - support LR/DLR
 # - support HGR
 
-
 def cluster_palette(image: Image):
-    shuffle_lines = list(range(200))
-    random.shuffle(shuffle_lines)
     line_to_palette = {}
-    for idx, line in enumerate(shuffle_lines):
-        line_to_palette[line] = idx % 16
+
+    #shuffle_lines = liprint(st(range(200))
+    #random.shuffle(shuffle_lines)
+    #for idx, line in enumerate(shuffle_lines):
+    #    line_to_palette[line] = idx % 16
+
+    # for line in range(200):
+    #     if line % 3 == 0:
+    #         line_to_palette[line] = int(line / (200 / 16))
+    #     elif line % 3 == 1:
+    #         line_to_palette[line] = np.clip(int(line / (200 / 16)) + 1, 0, 15)
+    #     else:
+    #         line_to_palette[line] = np.clip(int(line / (200 / 16)) + 2, 0, 15)
+
+    for line in range(200):
+        if line % 3 == 0:
+            line_to_palette[line] = int(line / (200 / 16))
+        elif line % 3 == 1:
+            line_to_palette[line] = np.clip(int(line / (200 / 16)) + 1, 0, 15)
+        else:
+            line_to_palette[line] = np.clip(int(line / (200 / 16)) + 2, 0, 15)
 
     colours_rgb = np.asarray(image).reshape((-1, 3))
     with colour.utilities.suppress_warnings(colour_usage_warnings=True):
@@ -43,16 +59,25 @@ def cluster_palette(image: Image):
         palette_colours[palette].extend(
             colours_cam[line * 320:(line + 1) * 320])
 
-    for palette in range(16):
-        kmeans = KMeans(n_clusters=16, max_iter=10000)
-        kmeans.fit_predict(palette_colours[palette])
-        palette_cam = kmeans.cluster_centers_
+    # For each line grouping, find big palette entries with minimal total
+    # distance
+
+    palette_cam = None
+    for palette_idx in range(16):
+        line_colours = palette_colours[palette_idx]
+        # if palette_idx > 0:
+        #     fixed_centroids = palette_cam[:8, :]
+        # else:
+        fixed_centroids = None
+        # print(np.array(line_colours), fixed_centroids)
+        palette_cam = dither_pyx.k_means_with_fixed_centroids(16, np.array(
+            line_colours), fixed_centroids=fixed_centroids, tolerance=1e-6)
         with colour.utilities.suppress_warnings(colour_usage_warnings=True):
             palette_rgb = colour.convert(palette_cam, "CAM16UCS", "RGB")
             # SHR colour palette only uses 4-bit values
             palette_rgb = np.round(palette_rgb * 15) / 15
-            # palette_rgb = palette_rgb.astype(np.float32) / 255
-            palettes_rgb[palette] = palette_rgb.astype(np.float32)
+            palettes_rgb[palette_idx] = palette_rgb.astype(np.float32)
+    # print(palettes_rgb)
     return palettes_rgb, line_to_palette
 
 
@@ -130,8 +155,8 @@ def main():
     for i in range(200):
         screen.line_palette[i] = line_to_palette[i]
         output_rgb[i, :, :] = (
-                    palettes_rgb[line_to_palette[i]][
-                        output_4bit[i, :]] * 255).astype(np.uint8)
+                palettes_rgb[line_to_palette[i]][
+                    output_4bit[i, :]] * 255).astype(np.uint8)
     output_srgb = image_py.linear_to_srgb(output_rgb).astype(np.uint8)
 
     # dither = dither_pattern.PATTERNS[args.dither]()

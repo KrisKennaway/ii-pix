@@ -426,3 +426,58 @@ def dither_shr(float[:, :, ::1] working_image, object palettes_rgb, float[:,::1]
 #                            0, 1)
 
     return np.array(output_4bit, dtype=np.uint8)
+
+import collections
+import random
+
+def k_means_with_fixed_centroids(
+        int n_clusters, float[:, ::1] data, float[:, ::1] fixed_centroids = None,
+        int iterations = 10000, float tolerance = 1e-3):
+    cdef int i, iteration, centroid_idx, num_fixed_centroids, num_random_centroids, best_centroid_idx
+    cdef float[::1] point, centroid, new_centroid, old_centroid
+    cdef float[:, ::1] centroids
+    cdef float best_dist, centroid_movement
+
+    centroids = np.zeros((n_clusters, 3), dtype=np.float32)
+    if fixed_centroids is not None:
+        centroids[:fixed_centroids.shape[0], :] = fixed_centroids
+    num_fixed_centroids = fixed_centroids.shape[0] if fixed_centroids is not None else 0
+    num_random_centroids = n_clusters - num_fixed_centroids
+
+    # TODO: kmeans++ initialization
+    for i in range(num_random_centroids):
+        centroids[num_fixed_centroids + i, :] = data[
+            random.randint(0, data.shape[0]), :]
+
+    cdef int[::1] centroid_weights = np.zeros(n_clusters, dtype=np.int32)
+    for iteration in range(iterations):
+        # print("centroids ", centroids)
+        closest_points = collections.defaultdict(list)
+        for point in data:
+            best_dist = 1e9
+            best_centroid_idx = 0
+            for centroid_idx, centroid in enumerate(centroids):
+                dist = colour_distance_squared(centroid, point)
+                if dist < best_dist:
+                    best_dist = dist
+                    best_centroid_idx = centroid_idx
+            closest_points[best_centroid_idx].append(point)
+
+        centroid_movement = 0
+
+        for centroid_idx, points in closest_points.items():
+            centroid_weights[centroid_idx] = len(points)
+            if centroid_idx < num_fixed_centroids:
+                continue
+            new_centroid = np.mean(np.array(points), axis=0)
+            old_centroid = centroids[centroid_idx]
+            centroid_movement += colour_distance_squared(old_centroid, new_centroid)
+            centroids[centroid_idx, :] = new_centroid
+        # print("iteration %d: movement %f" % (iteration, centroid_movement))
+        if centroid_movement < tolerance:
+            break
+
+    weighted_centroids = list(zip(centroid_weights, [tuple(c) for c in centroids]))
+    print(weighted_centroids)
+    return np.array([c for w, c in sorted(weighted_centroids, reverse=True)], dtype=np.float32)
+
