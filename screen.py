@@ -28,7 +28,7 @@ class SHR320Screen:
         # XXX check element range
         if palette.dtype != np.uint8:
             raise ValueError("Palette must be of type np.uint8")
-        print(palette)
+        # print(palette)
         self.palettes[idx] = np.array(palette)
 
     def set_pixels(self, pixels):
@@ -58,7 +58,7 @@ class SHR320Screen:
                 # print(r, g, b)
                 rgb_low = (g << 4) | b
                 rgb_hi = r
-                print(hex(rgb_hi), hex(rgb_low))
+                # print(hex(rgb_hi), hex(rgb_low))
                 palette_idx_offset = palette_offset + (32 * palette_idx)
                 dump[palette_idx_offset + (2 * rgb_idx)] = rgb_low
                 dump[palette_idx_offset + (2 * rgb_idx + 1)] = rgb_hi

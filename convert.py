@@ -65,6 +65,10 @@ def cluster_palette(image: Image):
     palette_cam = None
     for palette_idx in range(16):
         line_colours = palette_colours[palette_idx]
+        #if palette_idx < 15:
+        #    line_colours += palette_colours[palette_idx + 1]
+        # if palette_idx < 14:
+        #     line_colours += palette_colours[palette_idx + 2]
         # if palette_idx > 0:
         #     fixed_centroids = palette_cam[:8, :]
         # else:
@@ -72,6 +76,11 @@ def cluster_palette(image: Image):
         # print(np.array(line_colours), fixed_centroids)
         palette_cam = dither_pyx.k_means_with_fixed_centroids(16, np.array(
             line_colours), fixed_centroids=fixed_centroids, tolerance=1e-6)
+
+        #kmeans = KMeans(n_clusters=16, max_iter=10000)
+        #kmeans.fit_predict(line_colours)
+        #palette_cam = kmeans.cluster_centers_
+
         with colour.utilities.suppress_warnings(colour_usage_warnings=True):
             palette_rgb = colour.convert(palette_cam, "CAM16UCS", "RGB")
             # SHR colour palette only uses 4-bit values
