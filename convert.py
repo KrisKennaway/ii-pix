@@ -51,43 +51,68 @@ def cluster_palette(image: Image):
     with colour.utilities.suppress_warnings(colour_usage_warnings=True):
         colours_cam = colour.convert(colours_rgb, "RGB",
                                      "CAM16UCS").astype(np.float32)
-
     palettes_rgb = {}
-    palette_colours = collections.defaultdict(list)
-    for line in range(200):
-        palette = line_to_palette[line]
-        palette_colours[palette].extend(
-            colours_cam[line * 320:(line + 1) * 320])
+    palettes_cam = {}
+    for palette_idx in range(16):
+        p_lower = max(palette_idx-2, 0)
+        p_upper = min(palette_idx+2, 16)
+        palette_pixels = colours_cam[
+                         int(p_lower * (200/16)) * 320:int(p_upper * (
+                                 200/16)) * 320, :]
+
+        # kmeans = KMeans(n_clusters=16, max_iter=10000)
+        # kmeans.fit_predict(palette_pixels)
+        # palettes_cam[palette_idx] = kmeans.cluster_centers_
+
+        fixed_centroids = None
+        # print(np.array(line_colours), fixed_centroids)
+        palettes_cam[palette_idx] = dither_pyx.k_means_with_fixed_centroids(
+            16, palette_pixels, fixed_centroids=fixed_centroids, tolerance=1e-6)
+
+        # palette_colours = collections.defaultdict(list)
+    # for line in range(200):
+    #     palette = line_to_palette[line]
+    #     palette_colours[palette].extend(
+    #         colours_cam[line * 320:(line + 1) * 320])
 
     # For each line grouping, find big palette entries with minimal total
     # distance
 
-    palette_cam = None
-    for palette_idx in range(16):
-        line_colours = palette_colours[palette_idx]
-        #if palette_idx < 15:
-        #    line_colours += palette_colours[palette_idx + 1]
-        # if palette_idx < 14:
-        #     line_colours += palette_colours[palette_idx + 2]
-        # if palette_idx > 0:
-        #     fixed_centroids = palette_cam[:8, :]
-        # else:
-        fixed_centroids = None
-        # print(np.array(line_colours), fixed_centroids)
-        palette_cam = dither_pyx.k_means_with_fixed_centroids(16, np.array(
-            line_colours), fixed_centroids=fixed_centroids, tolerance=1e-6)
+    # palette_cam = None
+    # for palette_idx in range(16):
+    #     line_colours = palette_colours[palette_idx]
+    #     #if palette_idx < 15:
+    #     #    line_colours += palette_colours[palette_idx + 1]
+    #     # if palette_idx < 14:
+    #     #     line_colours += palette_colours[palette_idx + 2]
+    #     # if palette_idx > 0:
+    #     #     fixed_centroids = palette_cam[:8, :]
+    #     # else:
+    #     fixed_centroids = None
+    #     # print(np.array(line_colours), fixed_centroids)
+    #     palette_cam = dither_pyx.k_means_with_fixed_centroids(16, np.array(
+    #         line_colours), fixed_centroids=fixed_centroids, tolerance=1e-6)
 
         #kmeans = KMeans(n_clusters=16, max_iter=10000)
         #kmeans.fit_predict(line_colours)
         #palette_cam = kmeans.cluster_centers_
 
         with colour.utilities.suppress_warnings(colour_usage_warnings=True):
-            palette_rgb = colour.convert(palette_cam, "CAM16UCS", "RGB")
+            palette_rgb = colour.convert(palettes_cam[palette_idx], "CAM16UCS", "RGB")
             # SHR colour palette only uses 4-bit values
             palette_rgb = np.round(palette_rgb * 15) / 15
             palettes_rgb[palette_idx] = palette_rgb.astype(np.float32)
     # print(palettes_rgb)
-    return palettes_rgb, line_to_palette
+
+    # For each line, pick the palette with lowest total distance
+    # best_palette = 15
+    # for line in range(200):
+    #     line_pixels = colours_cam[line*320:(line+1)*320]
+    #     best_palette = dither_pyx.best_palette_for_line(
+    #         line_pixels, palettes_cam, best_palette)
+    #     line_to_palette[line] = best_palette
+    #     print(line, line_to_palette[line])
+    return palettes_cam, palettes_rgb, line_to_palette
 
 
 def main():
@@ -150,15 +175,15 @@ def main():
                         gamma=args.gamma_correct, srgb_output=True)).astype(
         np.float32) / 255
 
-    palettes_rgb, line_to_palette = cluster_palette(rgb)
+    palettes_cam, palettes_rgb, line_to_palette = cluster_palette(rgb)
     # print(palette_rgb)
     # screen.set_palette(0, (image_py.linear_to_srgb_array(palette_rgb) *
     #                        15).astype(np.uint8))
     for i, p in palettes_rgb.items():
         screen.set_palette(i, (np.round(p * 15)).astype(np.uint8))
 
-    output_4bit = dither_pyx.dither_shr(rgb, palettes_rgb, rgb_to_cam16,
-                                        line_to_palette)
+    output_4bit, line_to_palette = dither_pyx.dither_shr(
+        rgb, palettes_cam, palettes_rgb, rgb_to_cam16)
     screen.set_pixels(output_4bit)
     output_rgb = np.zeros((200, 320, 3), dtype=np.uint8)
     for i in range(200):
