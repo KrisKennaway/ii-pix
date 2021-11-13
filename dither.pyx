@@ -337,10 +337,10 @@ def dither_image(
 
 import colour
 
-@cython.boundscheck(True)
+@cython.boundscheck(False)
 @cython.wraparound(False)
 def dither_shr(float[:, :, ::1] working_image, object palettes_cam, object palettes_rgb, float[:,::1] rgb_to_cam16ucs):
-    cdef int y, x, idx, best_colour_idx
+    cdef int y, x, idx, best_colour_idx, best_palette
     cdef float best_distance, distance
     cdef float[::1] best_colour_rgb, pixel_cam, colour_rgb, colour_cam
     cdef float quant_error
@@ -362,8 +362,8 @@ def dither_shr(float[:, :, ::1] working_image, object palettes_cam, object palet
                 rgb_to_cam16ucs, working_image[y,x,0], working_image[y,x,1], working_image[y,x,2])
             line_cam[x, :] = colour_cam
 
-        best_palette = best_palette_for_line(line_cam, palettes_cam, y * 16 / 200, best_palette)
-        print("-->", best_palette)
+        best_palette = best_palette_for_line(line_cam, palettes_cam, <int>(y * 16 / 200), best_palette)
+        # print("-->", best_palette)
         palette_rgb = palettes_rgb[best_palette]
         line_to_palette[y] = best_palette
 
@@ -373,7 +373,8 @@ def dither_shr(float[:, :, ::1] working_image, object palettes_cam, object palet
 
             best_distance = 1e9
             best_colour_idx = -1
-            for idx, colour_rgb in enumerate(palette_rgb):
+            for idx in range(16):
+                colour_rgb = palette_rgb[idx, :]
                 colour_cam = convert_rgb_to_cam16ucs(rgb_to_cam16ucs, colour_rgb[0], colour_rgb[1], colour_rgb[2])
                 distance = colour_distance_squared(pixel_cam, colour_cam)
                 if distance < best_distance:
@@ -383,7 +384,6 @@ def dither_shr(float[:, :, ::1] working_image, object palettes_cam, object palet
             output_4bit[y, x] = best_colour_idx
 
             for i in range(3):
-                # output_rgb[y,x,i] = <int>(best_colour_rgb[i] * 255)
                 quant_error = working_image[y, x, i] - best_colour_rgb[i]
 
                 # Floyd-Steinberg dither
@@ -451,12 +451,12 @@ def dither_shr(float[:, :, ::1] working_image, object palettes_cam, object palet
                 #            working_image[y + 2, x + 2, i] + quant_error * (1 / 48),
                 #            0, 1)
 
-    return np.array(output_4bit, dtype=np.uint8), line_to_palette #, np.array(output_rgb, dtype=np.uint8)
+    return np.array(output_4bit, dtype=np.uint8), line_to_palette
 
 import collections
 import random
 
-@cython.boundscheck(True)
+@cython.boundscheck(False)
 @cython.wraparound(False)
 def k_means_with_fixed_centroids(
         int n_clusters, float[:, ::1] data, float[:, ::1] fixed_centroids = None,
@@ -509,9 +509,9 @@ def k_means_with_fixed_centroids(
     print(weighted_centroids)
     return np.array([c for w, c in sorted(weighted_centroids, reverse=True)], dtype=np.float32)
 
-@cython.boundscheck(True)
+@cython.boundscheck(False)
 @cython.wraparound(False)
-def best_palette_for_line(float [:, ::1] line_cam, object palettes_cam, int base_palette_idx, int last_palette_idx):
+cdef int best_palette_for_line(float [:, ::1] line_cam, object palettes_cam, int base_palette_idx, int last_palette_idx):
     cdef int palette_idx, best_palette_idx
     cdef float best_total_dist, total_dist, best_pixel_dist, pixel_dist
     cdef float[:, ::1] palette_cam

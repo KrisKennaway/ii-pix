@@ -10,7 +10,8 @@ import random
 import colour
 from PIL import Image
 import numpy as np
-from sklearn.cluster import KMeans
+from pyclustering.cluster.kmedians import kmedians
+from pyclustering.cluster.center_initializer import kmeans_plusplus_initializer
 
 import dither as dither_pyx
 import dither_pattern
@@ -26,9 +27,9 @@ import screen as screen_py
 def cluster_palette(image: Image):
     line_to_palette = {}
 
-    #shuffle_lines = liprint(st(range(200))
-    #random.shuffle(shuffle_lines)
-    #for idx, line in enumerate(shuffle_lines):
+    # shuffle_lines = liprint(st(range(200))
+    # random.shuffle(shuffle_lines)
+    # for idx, line in enumerate(shuffle_lines):
     #    line_to_palette[line] = idx % 16
 
     # for line in range(200):
@@ -54,51 +55,60 @@ def cluster_palette(image: Image):
     palettes_rgb = {}
     palettes_cam = {}
     for palette_idx in range(16):
-        p_lower = max(palette_idx-2, 0)
-        p_upper = min(palette_idx+2, 16)
+        p_lower = max(palette_idx - 2, 0)
+        p_upper = min(palette_idx + 2, 16)
         palette_pixels = colours_cam[
-                         int(p_lower * (200/16)) * 320:int(p_upper * (
-                                 200/16)) * 320, :]
+                         int(p_lower * (200 / 16)) * 320:int(p_upper * (
+                                 200 / 16)) * 320, :]
 
         # kmeans = KMeans(n_clusters=16, max_iter=10000)
         # kmeans.fit_predict(palette_pixels)
         # palettes_cam[palette_idx] = kmeans.cluster_centers_
 
-        fixed_centroids = None
+        # fixed_centroids = None
         # print(np.array(line_colours), fixed_centroids)
-        palettes_cam[palette_idx] = dither_pyx.k_means_with_fixed_centroids(
-            16, palette_pixels, fixed_centroids=fixed_centroids, tolerance=1e-6)
+        # palettes_cam[palette_idx] = dither_pyx.k_means_with_fixed_centroids(
+        #    16, palette_pixels, fixed_centroids=fixed_centroids,
+        #    tolerance=1e-6)
+
+        initial_centers = kmeans_plusplus_initializer(
+            palette_pixels, 16).initialize()
+        kmedians_instance = kmedians(palette_pixels, initial_centers)
+        kmedians_instance.process()
+        palettes_cam[palette_idx] = np.array(
+            kmedians_instance.get_medians()).astype(np.float32)
 
         # palette_colours = collections.defaultdict(list)
-    # for line in range(200):
-    #     palette = line_to_palette[line]
-    #     palette_colours[palette].extend(
-    #         colours_cam[line * 320:(line + 1) * 320])
+        # for line in range(200):
+        #     palette = line_to_palette[line]
+        #     palette_colours[palette].extend(
+        #         colours_cam[line * 320:(line + 1) * 320])
 
-    # For each line grouping, find big palette entries with minimal total
-    # distance
+        # For each line grouping, find big palette entries with minimal total
+        # distance
 
-    # palette_cam = None
-    # for palette_idx in range(16):
-    #     line_colours = palette_colours[palette_idx]
-    #     #if palette_idx < 15:
-    #     #    line_colours += palette_colours[palette_idx + 1]
-    #     # if palette_idx < 14:
-    #     #     line_colours += palette_colours[palette_idx + 2]
-    #     # if palette_idx > 0:
-    #     #     fixed_centroids = palette_cam[:8, :]
-    #     # else:
-    #     fixed_centroids = None
-    #     # print(np.array(line_colours), fixed_centroids)
-    #     palette_cam = dither_pyx.k_means_with_fixed_centroids(16, np.array(
-    #         line_colours), fixed_centroids=fixed_centroids, tolerance=1e-6)
+        # palette_cam = None
+        # for palette_idx in range(16):
+        #     line_colours = palette_colours[palette_idx]
+        #     #if palette_idx < 15:
+        #     #    line_colours += palette_colours[palette_idx + 1]
+        #     # if palette_idx < 14:
+        #     #     line_colours += palette_colours[palette_idx + 2]
+        #     # if palette_idx > 0:
+        #     #     fixed_centroids = palette_cam[:8, :]
+        #     # else:
+        #     fixed_centroids = None
+        #     # print(np.array(line_colours), fixed_centroids)
+        #     palette_cam = dither_pyx.k_means_with_fixed_centroids(16, np.array(
+        #         line_colours), fixed_centroids=fixed_centroids, tolerance=1e-6)
 
-        #kmeans = KMeans(n_clusters=16, max_iter=10000)
-        #kmeans.fit_predict(line_colours)
-        #palette_cam = kmeans.cluster_centers_
+        # kmeans = KMeans(n_clusters=16, max_iter=10000)
+        # kmeans.fit_predict(line_colours)
+        # palette_cam = kmeans.cluster_centers_
 
         with colour.utilities.suppress_warnings(colour_usage_warnings=True):
-            palette_rgb = colour.convert(palettes_cam[palette_idx], "CAM16UCS", "RGB")
+            palette_rgb = colour.convert(palettes_cam[palette_idx], "CAM16UCS",
+                                         "RGB")
             # SHR colour palette only uses 4-bit values
             palette_rgb = np.round(palette_rgb * 15) / 15
             palettes_rgb[palette_idx] = palette_rgb.astype(np.float32)
