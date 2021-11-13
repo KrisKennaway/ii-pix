@@ -52,8 +52,8 @@ def cluster_palette(image: Image):
     with colour.utilities.suppress_warnings(colour_usage_warnings=True):
         colours_cam = colour.convert(colours_rgb, "RGB",
                                      "CAM16UCS").astype(np.float32)
-    palettes_rgb = {}
-    palettes_cam = {}
+    palettes_rgb = np.empty((16, 16, 3), dtype=np.float32)
+    palettes_cam = np.empty((16, 16, 3), dtype=np.float32)
     for palette_idx in range(16):
         p_lower = max(palette_idx - 2, 0)
         p_upper = min(palette_idx + 2, 16)
@@ -75,7 +75,7 @@ def cluster_palette(image: Image):
             palette_pixels, 16).initialize()
         kmedians_instance = kmedians(palette_pixels, initial_centers)
         kmedians_instance.process()
-        palettes_cam[palette_idx] = np.array(
+        palettes_cam[palette_idx, :, :] = np.array(
             kmedians_instance.get_medians()).astype(np.float32)
 
         # palette_colours = collections.defaultdict(list)
@@ -111,7 +111,7 @@ def cluster_palette(image: Image):
                                          "RGB")
             # SHR colour palette only uses 4-bit values
             palette_rgb = np.round(palette_rgb * 15) / 15
-            palettes_rgb[palette_idx] = palette_rgb.astype(np.float32)
+            palettes_rgb[palette_idx, :, :] = palette_rgb.astype(np.float32)
     # print(palettes_rgb)
 
     # For each line, pick the palette with lowest total distance
@@ -189,8 +189,9 @@ def main():
     # print(palette_rgb)
     # screen.set_palette(0, (image_py.linear_to_srgb_array(palette_rgb) *
     #                        15).astype(np.uint8))
-    for i, p in palettes_rgb.items():
-        screen.set_palette(i, (np.round(p * 15)).astype(np.uint8))
+    for i in range(16):
+        screen.set_palette(i, (np.round(palettes_rgb[i, :, :] * 15)).astype(
+            np.uint8))
 
     output_4bit, line_to_palette = dither_pyx.dither_shr(
         rgb, palettes_cam, palettes_rgb, rgb_to_cam16)
