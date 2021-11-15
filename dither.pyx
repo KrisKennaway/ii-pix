@@ -339,7 +339,7 @@ import colour
 
 @cython.boundscheck(False)
 @cython.wraparound(False)
-def dither_shr(float[:, :, ::1] working_image, float[:, :, ::1] palettes_cam, float[:, :, ::1] palettes_rgb, float[:,::1] rgb_to_cam16ucs):
+def dither_shr(float[:, :, ::1] working_image, float[:, :, ::1] palettes_cam, float[:, :, ::1] palettes_rgb, float[:,::1] rgb_to_cam16ucs, float penalty):
     cdef int y, x, idx, best_colour_idx, best_palette
     cdef float best_distance, distance
     cdef float[::1] best_colour_rgb, pixel_cam, colour_rgb, colour_cam
@@ -354,13 +354,13 @@ def dither_shr(float[:, :, ::1] working_image, float[:, :, ::1] palettes_cam, fl
     cdef int[::1] line_to_palette = np.zeros(200, dtype=np.int32)
     best_palette = 15
     for y in range(200):
-        print(y)
+        # print(y)
         for x in range(320):
             colour_cam = convert_rgb_to_cam16ucs(
                 rgb_to_cam16ucs, working_image[y,x,0], working_image[y,x,1], working_image[y,x,2])
             line_cam[x, :] = colour_cam
 
-        best_palette = best_palette_for_line(line_cam, palettes_cam, <int>(y * 16 / 200), best_palette)
+        best_palette = best_palette_for_line(line_cam, palettes_cam, <int>(y * 16 / 200), best_palette, penalty)
         # print("-->", best_palette)
         palette_rgb = palettes_rgb[best_palette, :, :]
         line_to_palette[y] = best_palette
@@ -509,7 +509,7 @@ def k_means_with_fixed_centroids(
 
 @cython.boundscheck(False)
 @cython.wraparound(False)
-cdef int best_palette_for_line(float [:, ::1] line_cam, float[:, :, ::1] palettes_cam, int base_palette_idx, int last_palette_idx) nogil:
+cdef int best_palette_for_line(float [:, ::1] line_cam, float[:, :, ::1] palettes_cam, int base_palette_idx, int last_palette_idx, float last_penalty) nogil:
     cdef int palette_idx, best_palette_idx, palette_entry_idx, pixel_idx
     cdef float best_total_dist, total_dist, best_pixel_dist, pixel_dist
     cdef float[:, ::1] palette_cam
@@ -517,20 +517,23 @@ cdef int best_palette_for_line(float [:, ::1] line_cam, float[:, :, ::1] palette
 
     best_total_dist = 1e9
     best_palette_idx = -1
+    cdef float penalty
     cdef int line_size = line_cam.shape[0]
     for palette_idx in range(16):
         palette_cam = palettes_cam[palette_idx, :, :]
         if palette_idx < (base_palette_idx - 1) or palette_idx > (base_palette_idx + 1):
             continue
         if palette_idx == last_palette_idx:
-            continue
+            penalty = last_penalty
+        else:
+            penalty = 1.0
         total_dist = 0
         best_pixel_dist = 1e9
         for pixel_idx in range(line_size):
             pixel_cam = line_cam[pixel_idx]
             for palette_entry_idx in range(16):
                 palette_entry = palette_cam[palette_entry_idx, :]
-                pixel_dist = colour_distance_squared(pixel_cam, palette_entry)
+                pixel_dist = colour_distance_squared(pixel_cam, palette_entry) * penalty
                 if pixel_dist < best_pixel_dist:
                     best_pixel_dist = pixel_dist
             total_dist += best_pixel_dist
