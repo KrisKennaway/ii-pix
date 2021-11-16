@@ -46,16 +46,22 @@ class ClusterPalette:
     def iterate(self):
         self._global_palette = self._fit_global_palette()
         for palette_idx in range(16):
-
-            p_lower = max(palette_idx - 1.5, 0)
-            p_upper = min(palette_idx + 2.5, 16)
+            palette_band_width = 3
+            p_lower = max(palette_idx + 0.5 - (palette_band_width / 2), 0)
+            p_upper = min(palette_idx + 0.5 + (palette_band_width / 2), 16)
             # TODO: dynamically tune palette cuts
             palette_pixels = self._colours_cam[
                              int(p_lower * (200 / 16)) * 320:int(p_upper * (
                                      200 / 16)) * 320, :]
 
+            # TODO: clustering should be aware of the fact that we will
+            #  down-quantize to a 4-bit RGB value afterwards.  i.e. we should
+            #  not pick multiple centroids that will quantize to the same RGB
+            #  value since we'll "waste" a palette entry.  This doesn't seem to
+            #  be a major issue in practise though, and fixing it would require
+            #  implementing our own (optimized) k-means.
             best_wce = self._best_palette_distances[palette_idx]
-            # TODO: tolerance
+            # TODO: tune tolerance
             clusters = cluster.MiniBatchKMeans(
                 n_clusters=16, max_iter=10000, init=self._global_palette,
                 n_init=1)
@@ -138,6 +144,8 @@ def main():
         image_py.resize(image, screen.X_RES, screen.Y_RES,
                         gamma=args.gamma_correct)).astype(np.float32) / 255
 
+    iigs_palette = np.empty((16, 16, 3), dtype=np.uint8)
+
     # TODO: flags
     penalty = 1e9  # 0  # 1e9
     iterations = 50  # 0
@@ -180,11 +188,13 @@ def main():
             continue
 
         image_generation += 1
+
         for i in range(16):
-            screen.set_palette(i, (
-                np.round(image_py.linear_to_srgb(palettes_rgb[i, :,
-                                                 :] * 255) / 255 * 15)).astype(
-                np.uint8))
+            iigs_palette[i, :, :] = (
+                np.round(image_py.linear_to_srgb(
+                    palettes_rgb[i, :, :] * 255) / 255 * 15)).astype(np.uint8)
+            screen.set_palette(i, iigs_palette[i, :, :])
+
         screen.set_pixels(output_4bit)
         output_rgb = np.empty((200, 320, 3), dtype=np.uint8)
         for i in range(200):
@@ -216,6 +226,9 @@ def main():
                 out_image).transpose((1, 0, 2)))
             canvas.blit(surface, (0, 0))
             pygame.display.flip()
+
+    unique_colours = np.unique(iigs_palette.reshape(-1, 3), axis=0).shape[0]
+    print("%d unique colours" % unique_colours)
 
     # Save Double hi-res image
     outfile = os.path.join(os.path.splitext(args.output)[0] + "-preview.png")
