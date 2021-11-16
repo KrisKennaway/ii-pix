@@ -6,8 +6,11 @@ import os.path
 from PIL import Image
 import colour
 import numpy as np
-import pygame
 from sklearn import cluster
+
+from os import environ
+environ['PYGAME_HIDE_SUPPORT_PROMPT'] = '1'
+import pygame
 
 import dither as dither_pyx
 import dither_pattern
@@ -147,8 +150,8 @@ def main():
     iigs_palette = np.empty((16, 16, 3), dtype=np.uint8)
 
     # TODO: flags
-    penalty = 1e9  # 0  # 1e9
-    iterations = 50  # 0
+    penalty = 1e9
+    iterations = 50
 
     pygame.init()
     # TODO: for some reason I need to execute this twice - the first time
@@ -160,8 +163,8 @@ def main():
 
     total_image_error = 1e9
     cluster_palette = ClusterPalette(rgb)
-    image_generation = 0
-    for iteration in range(iterations):
+    iterations_since_improvement = 0
+    while iterations_since_improvement < iterations:
         # TODO: clean this up - e.g. pass in an acceptance lambda to iterate()
         old_best_palette_distances = cluster_palette._best_palette_distances
         old_palettes_cam = cluster_palette._palettes_cam
@@ -181,13 +184,13 @@ def main():
                     new_total_image_error))
             total_image_error = new_total_image_error
             palettes_rgb = new_palettes_rgb
+            iterations_since_improvement = 0
         else:
             cluster_palette._palettes_cam = old_palettes_cam
             cluster_palette._palettes_rgb = old_palettes_rgb
             cluster_palette._best_palette_distances = old_best_palette_distances
+            iterations_since_improvement += 1
             continue
-
-        image_generation += 1
 
         for i in range(16):
             iigs_palette[i, :, :] = (
