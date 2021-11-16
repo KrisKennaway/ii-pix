@@ -154,6 +154,7 @@ def main():
     cluster_palette = ClusterPalette(rgb)
     image_generation = 0
     for iteration in range(iterations):
+        # TODO: clean this up - e.g. pass in an acceptance lambda to iterate()
         old_best_palette_distances = cluster_palette._best_palette_distances
         old_palettes_cam = cluster_palette._palettes_cam
         old_palettes_rgb = cluster_palette._palettes_rgb
