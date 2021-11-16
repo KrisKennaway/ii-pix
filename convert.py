@@ -2,7 +2,6 @@
 
 import argparse
 import os.path
-import warnings
 
 from PIL import Image
 import colour
@@ -145,8 +144,7 @@ def main():
                         srgb_output=False).show()
     rgb = np.array(
         image_py.resize(image, screen.X_RES, screen.Y_RES,
-                        gamma=args.gamma_correct, srgb_output=True)).astype(
-        np.float32) / 255
+                        gamma=args.gamma_correct)).astype(np.float32) / 255
 
     # TODO: flags
     penalty = 10  # 1e9
@@ -170,7 +168,7 @@ def main():
         output_4bit, line_to_palette = dither_pyx.dither_shr(
             rgb, palettes_cam, palettes_rgb, rgb_to_cam16, float(penalty))
         screen.set_pixels(output_4bit)
-        output_rgb = np.zeros((200, 320, 3), dtype=np.uint8)
+        output_rgb = np.empty((200, 320, 3), dtype=np.uint8)
         for i in range(200):
             screen.line_palette[i] = line_to_palette[i]
             output_rgb[i, :, :] = (
@@ -193,7 +191,7 @@ def main():
         #         output_screen.bitmap_to_image_rgb(bitmap)).astype(np.uint8)
         out_image = image_py.resize(
             Image.fromarray(output_srgb), screen.X_RES * 2, screen.Y_RES * 2,
-            srgb_output=False)  # XXX true
+            srgb_output=True)
 
         if args.show_output:
             surface = pygame.surfarray.make_surface(np.asarray(
