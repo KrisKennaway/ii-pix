@@ -1,20 +1,13 @@
 """Image converter to Apple II Double Hi-Res format."""
 
 import argparse
-import array
 import os.path
-import time
-import collections
-import random
-import pygame
+import warnings
 
-import colour
 from PIL import Image
+import colour
 import numpy as np
-from pyclustering.cluster.kmedians import kmedians
-from pyclustering.cluster.kmeans import kmeans
-from pyclustering.utils.metric import distance_metric, type_metric
-from pyclustering.cluster.center_initializer import kmeans_plusplus_initializer
+import pygame
 from sklearn import cluster
 
 import dither as dither_pyx
@@ -31,7 +24,7 @@ import screen as screen_py
 class ClusterPalette:
     def __init__(self, image: Image):
         self._colours_cam = self._image_colours_cam(image)
-        self._best_palette_distances = {i: (1e9, None) for i in range(16)}
+        self._best_palette_distances = [1e9] * 16
         self._iterations = 0
         self._palettes_cam = np.empty((16, 16, 3), dtype=np.float32)
         self._palettes_rgb = np.empty((16, 16, 3), dtype=np.float32)
@@ -47,9 +40,9 @@ class ClusterPalette:
     def _fit_global_palette(self):
         """Compute a 16-colour palette for the entire image to use as
         starting point for the sub-palettes.  This should help when the image
-        has large blocks of colour since the sub-palettes will tend to pick the same coloursx."""
+        has large blocks of colour since the sub-palettes will tend to pick the
+        same colours."""
         clusters = cluster.MiniBatchKMeans(n_clusters=16, max_iter=10000)
-        # tol=0.0000000001, algorithm="elkan")
         clusters.fit_predict(self._colours_cam)
         return clusters.cluster_centers_
 
@@ -58,65 +51,33 @@ class ClusterPalette:
         print("Iteration %d" % self._iterations)
         for palette_idx in range(16):
 
-
-            # i=5: 3 * (200/16) : 7 * (200/16)
-            # print("Fitting palette %d" % palette_idx)
-            p_lower2 = max(palette_idx - 1.5, 0)
-            p_lower1 = max(palette_idx - 1, 0)
-            p_lower0 = palette_idx
-            p_upper0 = max(palette_idx + 1, 16)
-            p_upper1 = max(palette_idx + 2, 16)
-            p_upper2 = min(palette_idx + 2.5, 16)
-            # TODO: weight +/-1 and 0 bands higher
+            p_lower = max(palette_idx - 1.5, 0)
+            p_upper = min(palette_idx + 2.5, 16)
             # TODO: dynamically tune palette cuts
-            palette_pixels = np.concatenate(
-                [
-                    self._colours_cam[
-                        int(p_lower2 * (200 / 16)) * 320:int(p_upper2 * (
-                            200 / 16)) * 320, :],
-                    # self._colours_cam[
-                    #      int(p_lower1 * (200 / 16)) * 320:int(p_upper1 * (
-                    #          200 / 16)) * 320, :],
-                    # self._colours_cam[
-                    #      int(p_lower0 * (200 / 16)) * 320:int(p_upper0 * (
-                    #          200 / 16)) * 320, :],
-                ], axis=0)
+            palette_pixels = self._colours_cam[
+                        int(p_lower * (200 / 16)) * 320:int(p_upper * (
+                            200 / 16)) * 320, :]
 
-            best_wce, best_medians = self._best_palette_distances[palette_idx]
-            # if palette_idx == 0:
-            # initial_centers = kmeans_plusplus_initializer(
-            #     palette_pixels, 16).initialize()
-            # else:
-            #     initial_centers = kmedians_instance.get_medians()
-
-            # kmedians_instance = kmeans(
-            #     palette_pixels, initial_centers, tolerance=0.0000000001,
-            #     itermax=100,
-            #     metric=distance_metric(type_metric.EUCLIDEAN_SQUARE))
-            # kmedians_instance.process()
+            best_wce = self._best_palette_distances[palette_idx]
             # TODO: tolerance
             clusters = cluster.MiniBatchKMeans(
                 n_clusters=16, max_iter=10000, init=self._global_palette,
                 n_init=1)
-            # tol=0.0000000001, algorithm="elkan")
             clusters.fit_predict(palette_pixels)
-            # if kmedians_instance.get_total_wce() < best_wce:
-            #    best_wce = kmedians_instance.get_total_wce()
-            #    best_medians = kmedians_instance
             if clusters.inertia_ < (best_wce * 0.99):
-                best_wce = clusters.inertia_
-                print("Improved palette %d: %f" % (palette_idx, best_wce))
-
-                # self._palettes_cam[palette_idx, :, :] = np.array(
-                #     best_medians.get_centers()).astype(np.float32)
+                # TODO: sentinel
+                if best_wce < 1e9:
+                    print("Improved palette %d (+%f%%)" % (
+                        palette_idx, best_wce / clusters.inertia_))
 
                 self._palettes_cam[palette_idx, :, :] = np.array(
                     clusters.cluster_centers_).astype(np.float32)
-                self._best_palette_distances[palette_idx] = (
-                    best_wce, best_medians)
+                best_wce = clusters.inertia_
+                self._best_palette_distances[palette_idx] = best_wce
 
-                with colour.utilities.suppress_warnings(
-                        colour_usage_warnings=True):
+                # Suppress divide by zero warning,
+                # https://github.com/colour-science/colour/issues/900
+                with colour.utilities.suppress_warnings(python_warnings=True):
                     palette_rgb = colour.convert(
                         self._palettes_cam[palette_idx], "CAM16UCS", "RGB")
                     # SHR colour palette only uses 4-bit values
@@ -187,20 +148,21 @@ def main():
                         gamma=args.gamma_correct, srgb_output=True)).astype(
         np.float32) / 255
 
+    # TODO: flags
     penalty = 10  # 1e9
     iterations = 50
 
     pygame.init()
-    canvas = pygame.display.set_mode((640, 400))
+    # TODO: for some reason I need to execute this twice - the first time
+    #  the window is created and immediately destroyed
+    pygame.display.set_mode((640, 400))
     canvas = pygame.display.set_mode((640, 400))
     canvas.fill((0, 0, 0))
     pygame.display.flip()
-    # print("Foo")
 
     cluster_palette = ClusterPalette(rgb)
     for iteration in range(iterations):
         palettes_cam, palettes_rgb = cluster_palette.iterate()
-        # print((palettes_rgb*255).astype(np.uint8))
         for i in range(16):
             screen.set_palette(i, (np.round(palettes_rgb[i, :, :] * 15)).astype(
                 np.uint8))
