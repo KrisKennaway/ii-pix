@@ -2,6 +2,7 @@
 
 import argparse
 import os.path
+from typing import Tuple, List
 
 from PIL import Image
 import colour
@@ -9,6 +10,7 @@ import numpy as np
 from sklearn import cluster
 
 from os import environ
+
 environ['PYGAME_HIDE_SUPPORT_PROMPT'] = '1'
 import pygame
 
@@ -23,12 +25,15 @@ import screen as screen_py
 # - support LR/DLR
 # - support HGR
 
+
 class ClusterPalette:
-    def __init__(self, image: Image):
+    def __init__(
+            self, image: Image):
         self._colours_cam = self._image_colours_cam(image)
-        self._best_palette_distances = [1e9] * 16
+        self._errors = [1e9] * 16
         self._palettes_cam = np.empty((16, 16, 3), dtype=np.float32)
         self._palettes_rgb = np.empty((16, 16, 3), dtype=np.float32)
+        self._global_palette = np.empty((16, 16, 3), dtype=np.float32)
 
     def _image_colours_cam(self, image: Image):
         colours_rgb = np.asarray(image).reshape((-1, 3))
@@ -42,14 +47,45 @@ class ClusterPalette:
         starting point for the sub-palettes.  This should help when the image
         has large blocks of colour since the sub-palettes will tend to pick the
         same colours."""
+
         clusters = cluster.MiniBatchKMeans(n_clusters=16, max_iter=10000)
         clusters.fit_predict(self._colours_cam)
         return clusters.cluster_centers_
 
-    def iterate(self):
+    def propose_palettes(self) -> Tuple[np.ndarray, np.ndarray, List[float]]:
+        """Attempt to find new palettes that locally improve image quality.
+
+        Re-fit a set of 16 palettes from (overlapping) line ranges of the
+        source image, using k-means clustering in CAM16-UCS colour space.
+
+        We maintain the total image error for the pixels on which the 16
+        palettes are clustered.  A new palette that increases this local
+        image error is rejected.
+
+        New palettes that reduce local error cannot be applied immediately
+        though, because they may cause an increase in *global* image error
+        when dithering.  i.e. they would reduce the overall image quality.
+
+        The current (locally) best palettes are returned and can be applied
+        using accept_palettes().
+        """
+
+        # Compute a new 16-colour global palette for the entire image,
+        # used as the starting center positions for k-means clustering of the
+        # individual palettes
         self._global_palette = self._fit_global_palette()
+
+        new_errors = list(self._errors)
+        new_palettes_cam = np.copy(self._palettes_cam)
+        new_palettes_rgb = np.copy(self._palettes_rgb)
+
+        # The 16 palettes are striped across consecutive (overlapping) line
+        # ranges.  The basic unit is 200/16 = 12.5 lines, but we extend the
+        # line range to cover a multiple of this so that the palette ranges
+        # overlap.  Since nearby lines tend to have similar colours, this has
+        # the effect of smoothing out the colour transitions across palettes.
+        palette_band_width = 3
         for palette_idx in range(16):
-            palette_band_width = 3
             p_lower = max(palette_idx + 0.5 - (palette_band_width / 2), 0)
             p_upper = min(palette_idx + 0.5 + (palette_band_width / 2), 16)
             # TODO: dynamically tune palette cuts
@@ -58,34 +94,41 @@ class ClusterPalette:
                                      200 / 16)) * 320, :]
 
             # TODO: clustering should be aware of the fact that we will
-            #  down-quantize to a 4-bit RGB value afterwards.  i.e. we should
+            #  quantize to a 4-bit RGB value afterwards.  i.e. we should
             #  not pick multiple centroids that will quantize to the same RGB
             #  value since we'll "waste" a palette entry.  This doesn't seem to
             #  be a major issue in practise though, and fixing it would require
             #  implementing our own (optimized) k-means.
-            best_wce = self._best_palette_distances[palette_idx]
             # TODO: tune tolerance
             clusters = cluster.MiniBatchKMeans(
                 n_clusters=16, max_iter=10000, init=self._global_palette,
                 n_init=1)
             clusters.fit_predict(palette_pixels)
-            if clusters.inertia_ < best_wce:
-                self._palettes_cam[palette_idx, :, :] = np.array(
-                    clusters.cluster_centers_).astype(np.float32)
-                best_wce = clusters.inertia_
-                self._best_palette_distances[palette_idx] = best_wce
+            palette_error = clusters.inertia_
+            if palette_error >= self._errors[palette_idx]:
+                # Not a local improvement to existing palette
+                continue
 
-                # Suppress divide by zero warning,
-                # https://github.com/colour-science/colour/issues/900
-                with colour.utilities.suppress_warnings(python_warnings=True):
-                    palette_rgb = colour.convert(
-                        self._palettes_cam[palette_idx], "CAM16UCS", "RGB")
-                    # SHR colour palette only uses 4-bit values
-                    palette_rgb = np.round(palette_rgb * 15) / 15
-                    self._palettes_rgb[palette_idx, :, :] = palette_rgb.astype(
-                        np.float32)
+            palette_cam = np.array(clusters.cluster_centers_).astype(np.float32)
+            # Suppress divide by zero warning,
+            # https://github.com/colour-science/colour/issues/900
+            with colour.utilities.suppress_warnings(python_warnings=True):
+                # SHR colour palette only uses 4-bit RGB values
+                palette_rgb = (np.round(colour.convert(
+                    palette_cam, "CAM16UCS", "RGB") * 15) / 15).astype(
+                    np.float32)
+            new_palettes_cam[palette_idx, :, :] = palette_cam
+            new_palettes_rgb[palette_idx, :, :] = palette_rgb
+            new_errors[palette_idx] = palette_error
 
-        return self._palettes_cam, self._palettes_rgb
+        return new_palettes_cam, new_palettes_rgb, new_errors
+
+    def accept_palettes(
+            self, new_palettes_cam: np.ndarray,
+            new_palettes_rgb: np.ndarray, new_errors: List[float]):
+        self._palettes_cam = np.copy(new_palettes_cam)
+        self._palettes_rgb = np.copy(new_palettes_rgb)
+        self._errors = list(new_errors)
 
 
 def main():
@@ -147,8 +190,6 @@ def main():
         image_py.resize(image, screen.X_RES, screen.Y_RES,
                         gamma=args.gamma_correct)).astype(np.float32) / 255
 
-    iigs_palette = np.empty((16, 16, 3), dtype=np.uint8)
-
     # TODO: flags
     penalty = 1e9
     iterations = 50
@@ -162,42 +203,47 @@ def main():
     pygame.display.flip()
 
     total_image_error = 1e9
-    cluster_palette = ClusterPalette(rgb)
     iterations_since_improvement = 0
-    while iterations_since_improvement < iterations:
-        # TODO: clean this up - e.g. pass in an acceptance lambda to iterate()
-        old_best_palette_distances = cluster_palette._best_palette_distances
-        old_palettes_cam = cluster_palette._palettes_cam
-        old_palettes_rgb = cluster_palette._palettes_rgb
 
-        new_palettes_cam, new_palettes_rgb = cluster_palette.iterate()
-        output_4bit, line_to_palette, new_total_image_error = \
+    palette_iigs = np.empty((16, 16, 3), dtype=np.uint8)
+    cluster_palette = ClusterPalette(rgb)
+
+    while iterations_since_improvement < iterations:
+        new_palettes_cam, new_palettes_rgb, new_palette_errors = (
+            cluster_palette.propose_palettes())
+
+        # Recompute image with proposed palettes and check whether it has
+        # lower total image error than our previous best.
+        new_output_4bit, new_line_to_palette, new_total_image_error = \
             dither_pyx.dither_shr(
                 rgb, new_palettes_cam, new_palettes_rgb, rgb_to_cam16,
-                float(penalty)
-            )
-
-        if new_total_image_error < total_image_error:
-            if total_image_error < 1e9:
-                print("Improved quality +%f%% (%f)" % (
-                    (1 - new_total_image_error / total_image_error) * 100,
-                    new_total_image_error))
-            total_image_error = new_total_image_error
-            palettes_rgb = new_palettes_rgb
-            iterations_since_improvement = 0
-        else:
-            cluster_palette._palettes_cam = old_palettes_cam
-            cluster_palette._palettes_rgb = old_palettes_rgb
-            cluster_palette._best_palette_distances = old_best_palette_distances
+                float(penalty))
+        if new_total_image_error >= total_image_error:
             iterations_since_improvement += 1
             continue
 
+        # We found a globally better set of palettes
+        iterations_since_improvement = 0
+        cluster_palette.accept_palettes(
+            new_palettes_cam, new_palettes_rgb, new_palette_errors)
+
+        if total_image_error < 1e9:
+            print("Improved quality +%f%% (%f)" % (
+                (1 - new_total_image_error / total_image_error) * 100,
+                new_total_image_error))
+        output_4bit = new_output_4bit
+        line_to_palette = new_line_to_palette
+        total_image_error = new_total_image_error
+        palettes_rgb = new_palettes_rgb
+
+        # Recompute 4-bit //gs RGB palettes
         for i in range(16):
-            iigs_palette[i, :, :] = (
+            palette_iigs[i, :, :] = (
                 np.round(image_py.linear_to_srgb(
                     palettes_rgb[i, :, :] * 255) / 255 * 15)).astype(np.uint8)
-            screen.set_palette(i, iigs_palette[i, :, :])
+            screen.set_palette(i, palette_iigs[i, :, :])
 
+        # Recompute current screen RGB image
         screen.set_pixels(output_4bit)
         output_rgb = np.empty((200, 320, 3), dtype=np.uint8)
         for i in range(200):
@@ -225,12 +271,12 @@ def main():
             srgb_output=True)
 
         if args.show_output:
-            surface = pygame.surfarray.make_surface(np.asarray(
-                out_image).transpose((1, 0, 2)))
+            surface = pygame.surfarray.make_surface(
+                np.asarray(out_image).transpose((1, 0, 2)))  # flip y/x axes
             canvas.blit(surface, (0, 0))
             pygame.display.flip()
 
-    unique_colours = np.unique(iigs_palette.reshape(-1, 3), axis=0).shape[0]
+    unique_colours = np.unique(palette_iigs.reshape(-1, 3), axis=0).shape[0]
     print("%d unique colours" % unique_colours)
 
     # Save Double hi-res image
