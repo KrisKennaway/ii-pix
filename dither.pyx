@@ -171,7 +171,7 @@ cdef inline float fabs(float value) nogil:
 
 @cython.boundscheck(False)
 @cython.wraparound(False)
-cdef inline float colour_distance_squared(float[::1] colour1, float[::1] colour2) nogil:
+cdef inline double colour_distance_squared(float[::1] colour1, float[::1] colour2) nogil:
     return (colour1[0] - colour2[0]) ** 2 + (colour1[1] - colour2[1]) ** 2 + (colour1[2] - colour2[2]) ** 2
 
 
@@ -339,20 +339,21 @@ import colour
 
 @cython.boundscheck(False)
 @cython.wraparound(False)
-def dither_shr(float[:, :, ::1] working_image, float[:, :, ::1] palettes_cam, float[:, :, ::1] palettes_rgb, float[:,::1] rgb_to_cam16ucs, float penalty):
+def dither_shr(float[:, :, ::1] input_rgb, float[:, :, ::1] palettes_cam, float[:, :, ::1] palettes_rgb, float[:,::1] rgb_to_cam16ucs, float penalty):
     cdef int y, x, idx, best_colour_idx, best_palette
-    cdef float best_distance, distance
+    cdef double best_distance, distance, total_image_error
     cdef float[::1] best_colour_rgb, pixel_cam, colour_rgb, colour_cam
     cdef float quant_error
     cdef float[:, ::1] palette_rgb
 
     cdef (unsigned char)[:, ::1] output_4bit = np.zeros((200, 320), dtype=np.uint8)
-    # cdef (unsigned char)[:, :, ::1] output_rgb = np.zeros((200, 320, 3), dtype=np.uint8)
-
+    cdef float[:, :, ::1] working_image = np.copy(input_rgb)
     cdef float[:, ::1] line_cam = np.zeros((320, 3), dtype=np.float32)
 
     cdef int[::1] line_to_palette = np.zeros(200, dtype=np.int32)
+
     best_palette = 15
+    total_image_error = 0.0
     for y in range(200):
         # print(y)
         for x in range(320):
@@ -380,6 +381,8 @@ def dither_shr(float[:, :, ::1] working_image, float[:, :, ::1] palettes_cam, fl
                     best_colour_idx = idx
             best_colour_rgb = palette_rgb[best_colour_idx]
             output_4bit[y, x] = best_colour_idx
+            total_image_error += best_distance
+            # print(y,x,best_distance,total_image_error)
 
             for i in range(3):
                 quant_error = working_image[y, x, i] - best_colour_rgb[i]
@@ -449,7 +452,7 @@ def dither_shr(float[:, :, ::1] working_image, float[:, :, ::1] palettes_cam, fl
                 #            working_image[y + 2, x + 2, i] + quant_error * (1 / 48),
                 #            0, 1)
 
-    return np.array(output_4bit, dtype=np.uint8), line_to_palette
+    return np.array(output_4bit, dtype=np.uint8), line_to_palette, total_image_error
 
 import collections
 import random
@@ -511,7 +514,7 @@ def k_means_with_fixed_centroids(
 @cython.wraparound(False)
 cdef int best_palette_for_line(float [:, ::1] line_cam, float[:, :, ::1] palettes_cam, int base_palette_idx, int last_palette_idx, float last_penalty) nogil:
     cdef int palette_idx, best_palette_idx, palette_entry_idx, pixel_idx
-    cdef float best_total_dist, total_dist, best_pixel_dist, pixel_dist
+    cdef double best_total_dist, total_dist, best_pixel_dist, pixel_dist
     cdef float[:, ::1] palette_cam
     cdef float[::1] pixel_cam, palette_entry
 

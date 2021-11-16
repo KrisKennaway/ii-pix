@@ -24,10 +24,8 @@ class ClusterPalette:
     def __init__(self, image: Image):
         self._colours_cam = self._image_colours_cam(image)
         self._best_palette_distances = [1e9] * 16
-        self._iterations = 0
         self._palettes_cam = np.empty((16, 16, 3), dtype=np.float32)
         self._palettes_rgb = np.empty((16, 16, 3), dtype=np.float32)
-        self._global_palette = self._fit_global_palette()
 
     def _image_colours_cam(self, image: Image):
         colours_rgb = np.asarray(image).reshape((-1, 3))
@@ -46,16 +44,15 @@ class ClusterPalette:
         return clusters.cluster_centers_
 
     def iterate(self):
-        self._iterations += 1
-        print("Iteration %d" % self._iterations)
+        self._global_palette = self._fit_global_palette()
         for palette_idx in range(16):
 
             p_lower = max(palette_idx - 1.5, 0)
             p_upper = min(palette_idx + 2.5, 16)
             # TODO: dynamically tune palette cuts
             palette_pixels = self._colours_cam[
-                        int(p_lower * (200 / 16)) * 320:int(p_upper * (
-                            200 / 16)) * 320, :]
+                             int(p_lower * (200 / 16)) * 320:int(p_upper * (
+                                     200 / 16)) * 320, :]
 
             best_wce = self._best_palette_distances[palette_idx]
             # TODO: tolerance
@@ -63,12 +60,7 @@ class ClusterPalette:
                 n_clusters=16, max_iter=10000, init=self._global_palette,
                 n_init=1)
             clusters.fit_predict(palette_pixels)
-            if clusters.inertia_ < (best_wce * 0.99):
-                # TODO: sentinel
-                if best_wce < 1e9:
-                    print("Improved palette %d (+%f%%)" % (
-                        palette_idx, best_wce / clusters.inertia_))
-
+            if clusters.inertia_ < best_wce:
                 self._palettes_cam[palette_idx, :, :] = np.array(
                     clusters.cluster_centers_).astype(np.float32)
                 best_wce = clusters.inertia_
@@ -147,26 +139,51 @@ def main():
                         gamma=args.gamma_correct)).astype(np.float32) / 255
 
     # TODO: flags
-    penalty = 10  # 1e9
-    iterations = 50
+    penalty = 1e9  # 0  # 1e9
+    iterations = 50  # 0
 
     pygame.init()
     # TODO: for some reason I need to execute this twice - the first time
     #  the window is created and immediately destroyed
-    pygame.display.set_mode((640, 400))
+    _ = pygame.display.set_mode((640, 400))
     canvas = pygame.display.set_mode((640, 400))
     canvas.fill((0, 0, 0))
     pygame.display.flip()
 
+    total_image_error = 1e9
     cluster_palette = ClusterPalette(rgb)
+    image_generation = 0
     for iteration in range(iterations):
-        palettes_cam, palettes_rgb = cluster_palette.iterate()
-        for i in range(16):
-            screen.set_palette(i, (np.round(palettes_rgb[i, :, :] * 15)).astype(
-                np.uint8))
+        old_best_palette_distances = cluster_palette._best_palette_distances
+        old_palettes_cam = cluster_palette._palettes_cam
+        old_palettes_rgb = cluster_palette._palettes_rgb
 
-        output_4bit, line_to_palette = dither_pyx.dither_shr(
-            rgb, palettes_cam, palettes_rgb, rgb_to_cam16, float(penalty))
+        new_palettes_cam, new_palettes_rgb = cluster_palette.iterate()
+        output_4bit, line_to_palette, new_total_image_error = \
+            dither_pyx.dither_shr(
+                rgb, new_palettes_cam, new_palettes_rgb, rgb_to_cam16,
+                float(penalty)
+            )
+
+        if new_total_image_error < total_image_error:
+            if total_image_error < 1e9:
+                print("Improved quality +%f%% (%f)" % (
+                    (1 - new_total_image_error / total_image_error) * 100,
+                    new_total_image_error))
+            total_image_error = new_total_image_error
+            palettes_rgb = new_palettes_rgb
+        else:
+            cluster_palette._palettes_cam = old_palettes_cam
+            cluster_palette._palettes_rgb = old_palettes_rgb
+            cluster_palette._best_palette_distances = old_best_palette_distances
+            continue
+
+        image_generation += 1
+        for i in range(16):
+            screen.set_palette(i, (
+                np.round(image_py.linear_to_srgb(palettes_rgb[i, :,
+                                                 :] * 255) / 255 * 15)).astype(
+                np.uint8))
         screen.set_pixels(output_4bit)
         output_rgb = np.empty((200, 320, 3), dtype=np.uint8)
         for i in range(200):
@@ -199,17 +216,15 @@ def main():
             canvas.blit(surface, (0, 0))
             pygame.display.flip()
 
-        # Save Double hi-res image
-        outfile = os.path.join(os.path.splitext(args.output)[0] +
-                               "-%d-preview.png" % cluster_palette._iterations)
-        out_image.save(outfile, "PNG")
-        screen.pack()
-        # with open(args.output, "wb") as f:
-        #     f.write(bytes(screen.aux))
-        #     f.write(bytes(screen.main))
-        with open("%s-%s" % (args.output, cluster_palette._iterations),
-                  "wb") as f:
-            f.write(bytes(screen.memory))
+    # Save Double hi-res image
+    outfile = os.path.join(os.path.splitext(args.output)[0] + "-preview.png")
+    out_image.save(outfile, "PNG")
+    screen.pack()
+    # with open(args.output, "wb") as f:
+    #     f.write(bytes(screen.aux))
+    #     f.write(bytes(screen.main))
+    with open(args.output, "wb") as f:
+        f.write(bytes(screen.memory))
 
 
 if __name__ == "__main__":
