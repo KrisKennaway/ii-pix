@@ -157,10 +157,10 @@ cdef int dither_lookahead(Dither* dither, float[:, :, ::1] palette_cam16, float[
     return best
 
 
-@cython.boundscheck(False)
+@cython.boundscheck(True)
 @cython.wraparound(False)
 cdef inline float[::1] convert_rgb_to_cam16ucs(float[:, ::1] rgb_to_cam16ucs, float r, float g, float b) nogil:
-    cdef int rgb_24bit = (<int>(r*255) << 16) + (<int>(g*255) << 8) + <int>(b*255)
+    cdef unsigned int rgb_24bit = (<unsigned int>(r*255) << 16) + (<unsigned int>(g*255) << 8) + <unsigned int>(b*255)
     return rgb_to_cam16ucs[rgb_24bit]
 
 @cython.boundscheck(False)
@@ -357,8 +357,6 @@ def dither_shr(
     total_image_error = 0.0
     for y in range(200):
         for x in range(320):
-            #for i in range(3):
-            #    working_image[y, x, i] = np.round(working_image[y, x, i] * 15) / 15
             colour_cam = convert_rgb_to_cam16ucs(
                 rgb_to_cam16ucs, working_image[y,x,0], working_image[y,x,1], working_image[y,x,2])
             line_cam[x, :] = colour_cam
@@ -491,53 +489,133 @@ cdef int best_palette_for_line(float [:, ::1] line_cam, float[:, :, ::1] palette
             best_palette_idx = palette_idx
     return best_palette_idx
 
-@cython.boundscheck(False)
-@cython.wraparound(False)
+@cython.boundscheck(True)
+@cython.wraparound(True)
+def convert_rgb12_iigs_to_cam(float [:, ::1] rgb12_iigs_to_cam16ucs, (unsigned char)[::1] point_rgb12) -> float[::1]:
+    cdef int rgb12 = (point_rgb12[0] << 8) | (point_rgb12[1] << 4) | point_rgb12[2]
+    return rgb12_iigs_to_cam16ucs[rgb12]
+
+import colour
+
+cdef float[::1] linear_to_srgb_array(float[::1] a, float gamma=2.4):
+    cdef int i
+    cdef float[::1] res = np.empty(3, dtype=np.float32)
+    for i in range(3):
+        if a[i] <= 0.0031308:
+            res[i] = a[i] * 12.92
+        else:
+            res[i] = 1.055 * a[i] ** (1.0 / gamma) - 0.055
+    return res
+
+@cython.boundscheck(True)
+@cython.wraparound(True)
+def convert_cam16ucs_to_rgb12_iigs(float[::1] point_cam) -> int[::1]:  # XXX return type
+    cdef float[::1] rgb, rgb12_iigs
+    cdef int i
+
+    # Convert CAM16UCS input to RGB
+    with colour.utilities.suppress_warnings(python_warnings=True):
+        rgb = colour.convert(point_cam, "CAM16UCS", "RGB").astype(np.float32)
+
+    rgb12_iigs = np.clip(
+        # Convert to Rec.601 R'G'B'
+        colour.YCbCr_to_RGB(
+            # Gamma correct and convert Rec.709 R'G'B' to YCbCr
+            colour.RGB_to_YCbCr(
+                linear_to_srgb_array(rgb), K=colour.WEIGHTS_YCBCR['ITU-R BT.709']),
+            K=colour.WEIGHTS_YCBCR['ITU-R BT.601']), 0, 1).astype(np.float32)
+
+    for i in range(3):
+        rgb12_iigs[i] *= 15
+
+    return np.round(rgb12_iigs).astype(np.uint8)
+
+
+@cython.boundscheck(True)
+@cython.wraparound(True)
 def k_means_with_fixed_centroids(
-    int n_clusters, int n_fixed, float[:, ::1] samples, float[:, ::1] initial_centroids, int max_iterations, float tolerance):
+    int n_clusters, int n_fixed, float[:, ::1] samples, (unsigned char)[:, ::1] initial_centroids, int max_iterations,
+    float tolerance, float [:, ::1] rgb12_iigs_to_cam16ucs):
 
     cdef double error, best_error, centroid_movement, total_error
     cdef int centroid_idx, closest_centroid_idx, i, point_idx
 
-    cdef float[:, ::1] centroids = initial_centroids[:, :]
-    cdef float[::1] centroid, point, new_centroid = np.empty(3, dtype=np.float32)
+    cdef (unsigned char)[:, ::1] centroids_rgb12 = initial_centroids[:, :]
+    cdef (unsigned char)[::1] centroid_rgb12, new_centroid_rgb12
 
-    cdef float[:, ::1] centroid_sample_positions_total
+    cdef float[::1] point_cam, new_centroid_cam = np.empty(3, dtype=np.float32)
+    cdef float[:, ::1] centroid_cam_sample_positions_total
     cdef int[::1] centroid_sample_counts
 
+    # Allow centroids to move on lattice of size 15/255 in sRGB Rec.601 space -- matches //gs palette
+    # map centroids to CAM when computing distances, cluster means etc
+    # Map new centroid back to closest lattice point
+
+    # Return CAM centroids
+
+    cdef int centroid_moved
     for iteration in range(max_iterations):
+        centroid_moved = 1
         total_error = 0.0
         centroid_movement = 0.0
-        centroid_sample_positions_total = np.zeros((16, 3), dtype=np.float32)
+        centroid_cam_sample_positions_total = np.zeros((16, 3), dtype=np.float32)
         centroid_sample_counts = np.zeros(16, dtype=np.int32)
 
         for point_idx in range(samples.shape[0]):
-            point = samples[point_idx, :]
+            point_cam = samples[point_idx, :]
             best_error = 1e9
             closest_centroid_idx = 0
             for centroid_idx in range(n_clusters):
-                centroid = centroids[centroid_idx, :]
-                error = colour_distance_squared(centroid, point)
+                centroid_rgb12 = centroids_rgb12[centroid_idx, :]
+                error = colour_distance_squared(convert_rgb12_iigs_to_cam(rgb12_iigs_to_cam16ucs, centroid_rgb12), point_cam)
                 if error < best_error:
                     best_error = error
                     closest_centroid_idx = centroid_idx
             for i in range(3):
-                centroid_sample_positions_total[closest_centroid_idx, i] += point[i]
+                centroid_cam_sample_positions_total[closest_centroid_idx, i] += point_cam[i]
             centroid_sample_counts[closest_centroid_idx] += 1
             total_error += best_error
 
         for centroid_idx in range(n_fixed, n_clusters):
             if centroid_sample_counts[centroid_idx]:
                 for i in range(3):
-                    new_centroid[i] = (
-                        centroid_sample_positions_total[centroid_idx, i] / centroid_sample_counts[centroid_idx])
-                centroid_movement += colour_distance_squared(centroids[centroid_idx], new_centroid)
+                    new_centroid_cam[i] = (
+                        centroid_cam_sample_positions_total[centroid_idx, i] / centroid_sample_counts[centroid_idx])
+                centroid_movement += colour_distance_squared(
+                    convert_rgb12_iigs_to_cam(rgb12_iigs_to_cam16ucs, centroids_rgb12[centroid_idx]), new_centroid_cam)
+                new_centroid_rgb12 = convert_cam16ucs_to_rgb12_iigs(new_centroid_cam)
+                for i in range(3):
+                    if centroids_rgb12[centroid_idx, i] != new_centroid_rgb12[i]:
+                        print(i, centroids_rgb12[centroid_idx, i], new_centroid_rgb12[i])
+                        centroids_rgb12[centroid_idx, i] = new_centroid_rgb12[i]
+                        centroid_moved = 1
 
-                centroids[centroid_idx, :] = new_centroid
-
-        # print(iteration, total_error, centroids)
+        print(iteration, centroid_movement, total_error, centroids_rgb12)
 
         if centroid_movement < tolerance:
             break
+        if centroid_moved == 0:
+            break
 
-    return centroids, total_error
+    return centroids_rgb12, total_error
+
+
+#@cython.boundscheck(False)
+#@cython.wraparound(False)
+#cdef float[::1] closest_quantized_point(float [:, ::1] rgb24_to_cam, float [::1] point_cam) nogil:
+#    cdef unsigned int rgb12, rgb24, closest_rgb24, r, g, b
+#    cdef double best_distance = 1e9, distance
+#    for rgb12 in range(2**12):
+#        r = rgb12 >> 8
+#        g = (rgb12 >> 4) & 0xf
+#        b = rgb12 & 0xf
+#        rgb24 = (r << 20) | (r << 16) | (g << 12) | (g << 8) | (b << 4) | b
+#        distance = colour_distance_squared(rgb24_to_cam[rgb24], point_cam)
+#        # print(hex(rgb24), distance)
+#        if distance < best_distance:
+#            best_distance = distance
+#            closest_rgb24 = rgb24
+#            # print(distance, rgb24, hex(rgb24))
+#    # print("-->", closest_rgb24, hex(closest_rgb24), best_distance)
+#    return rgb24_to_cam[closest_rgb24]
+
