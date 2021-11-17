@@ -586,11 +586,11 @@ def k_means_with_fixed_centroids(
                 new_centroid_rgb12 = convert_cam16ucs_to_rgb12_iigs(new_centroid_cam)
                 for i in range(3):
                     if centroids_rgb12[centroid_idx, i] != new_centroid_rgb12[i]:
-                        print(i, centroids_rgb12[centroid_idx, i], new_centroid_rgb12[i])
+                        # print(i, centroids_rgb12[centroid_idx, i], new_centroid_rgb12[i])
                         centroids_rgb12[centroid_idx, i] = new_centroid_rgb12[i]
                         centroid_moved = 1
 
-        print(iteration, centroid_movement, total_error, centroids_rgb12)
+        # print(iteration, centroid_movement, total_error, centroids_rgb12)
 
         if centroid_movement < tolerance:
             break

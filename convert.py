@@ -65,7 +65,6 @@ class ClusterPalette:
             res[i, :] = dither_pyx.convert_cam16ucs_to_rgb12_iigs(
                 clusters.cluster_centers_[frequency_order][i].astype(
                     np.float32))
-        print(res)
         return res
 
     def propose_palettes(self) -> Tuple[np.ndarray, np.ndarray, List[float]]:
