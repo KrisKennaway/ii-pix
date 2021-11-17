@@ -341,7 +341,7 @@ def dither_image(
 def dither_shr(
         float[:, :, ::1] input_rgb, float[:, :, ::1] palettes_cam, float[:, :, ::1] palettes_rgb,
         float[:,::1] rgb_to_cam16ucs, float penalty):
-    cdef int y, x, idx, best_colour_idx, best_palette
+    cdef int y, x, idx, best_colour_idx, best_palette, i
     cdef double best_distance, distance, total_image_error
     cdef float[::1] best_colour_rgb, pixel_cam, colour_rgb, colour_cam
     cdef float quant_error
@@ -357,6 +357,8 @@ def dither_shr(
     total_image_error = 0.0
     for y in range(200):
         for x in range(320):
+            #for i in range(3):
+            #    working_image[y, x, i] = np.round(working_image[y, x, i] * 15) / 15
             colour_cam = convert_rgb_to_cam16ucs(
                 rgb_to_cam16ucs, working_image[y,x,0], working_image[y,x,1], working_image[y,x,2])
             line_cam[x, :] = colour_cam
@@ -489,3 +491,53 @@ cdef int best_palette_for_line(float [:, ::1] line_cam, float[:, :, ::1] palette
             best_palette_idx = palette_idx
     return best_palette_idx
 
+@cython.boundscheck(False)
+@cython.wraparound(False)
+def k_means_with_fixed_centroids(
+    int n_clusters, int n_fixed, float[:, ::1] samples, float[:, ::1] initial_centroids, int max_iterations, float tolerance):
+
+    cdef double error, best_error, centroid_movement, total_error
+    cdef int centroid_idx, closest_centroid_idx, i, point_idx
+
+    cdef float[:, ::1] centroids = initial_centroids[:, :]
+    cdef float[::1] centroid, point, new_centroid = np.empty(3, dtype=np.float32)
+
+    cdef float[:, ::1] centroid_sample_positions_total
+    cdef int[::1] centroid_sample_counts
+
+    for iteration in range(max_iterations):
+        total_error = 0.0
+        centroid_movement = 0.0
+        centroid_sample_positions_total = np.zeros((16, 3), dtype=np.float32)
+        centroid_sample_counts = np.zeros(16, dtype=np.int32)
+
+        for point_idx in range(samples.shape[0]):
+            point = samples[point_idx, :]
+            best_error = 1e9
+            closest_centroid_idx = 0
+            for centroid_idx in range(n_clusters):
+                centroid = centroids[centroid_idx, :]
+                error = colour_distance_squared(centroid, point)
+                if error < best_error:
+                    best_error = error
+                    closest_centroid_idx = centroid_idx
+            for i in range(3):
+                centroid_sample_positions_total[closest_centroid_idx, i] += point[i]
+            centroid_sample_counts[closest_centroid_idx] += 1
+            total_error += best_error
+
+        for centroid_idx in range(n_fixed, n_clusters):
+            if centroid_sample_counts[centroid_idx]:
+                for i in range(3):
+                    new_centroid[i] = (
+                        centroid_sample_positions_total[centroid_idx, i] / centroid_sample_counts[centroid_idx])
+                centroid_movement += colour_distance_squared(centroids[centroid_idx], new_centroid)
+
+                centroids[centroid_idx, :] = new_centroid
+
+        # print(iteration, total_error, centroids)
+
+        if centroid_movement < tolerance:
+            break
+
+    return centroids, total_error

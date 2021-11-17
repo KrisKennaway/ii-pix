@@ -55,6 +55,7 @@ class SHR320Screen:
         for palette_idx, palette in self.palettes.items():
             for rgb_idx, rgb in enumerate(palette):
                 r, g, b = rgb
+                assert r <= 15 and g <= 15 and b <= 15
                 # print(r, g, b)
                 rgb_low = (g << 4) | b
                 rgb_hi = r
