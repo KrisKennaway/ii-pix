@@ -65,20 +65,29 @@ class ClusterPalette:
                 np.float32))
         return res
 
-    def _palette_splits(self, palette_band_width=3):
+    def _palette_splits(self, palette_height=35):
         # The 16 palettes are striped across consecutive (overlapping) line
-        # ranges.  The basic unit is 200/16 = 12.5 lines, but we extend the
-        # line range to cover a multiple of this so that the palette ranges
-        # overlap.  Since nearby lines tend to have similar colours, this has
+        # ranges.  Since nearby lines tend to have similar colours, this has
         # the effect of smoothing out the colour transitions across palettes.
+
+        # If we want to overlap 16 palettes in 200 lines, where each palette
+        # has height H and overlaps the previous one by L lines, then the
+        # boundaries are at lines:
+        #   (0, H), (H-L, 2H-L), (2H-2L, 3H-2L), ..., (15H-15L, 16H - 15L)
+        # i.e. 16H - 15L = 200, sofor a given palette height H we need to
+        # overlap by:
+        #   L = (16H - 200)/15
+
+        palette_overlap = (16 * palette_height - 200) / 15
 
         palette_ranges = []
         for palette_idx in range(16):
-            p_lower = max(palette_idx + 0.5 - (palette_band_width / 2), 0)
-            p_upper = min(palette_idx + 0.5 + (palette_band_width / 2), 16)
-            palette_ranges.append(
-                (int(p_lower * (200 / 16)) * 320, int(p_upper * (200 / 16)) *
-                 320))
+            palette_lower = int(
+                palette_idx * (palette_height - palette_overlap))
+            palette_upper = palette_lower + palette_height
+            palette_ranges.append((palette_lower, palette_upper))
+        assert palette_upper == 200
+        # print(palette_ranges)
         return palette_ranges
 
     def propose_palettes(self) -> Tuple[np.ndarray, np.ndarray, List[float]]:
@@ -113,7 +122,8 @@ class ClusterPalette:
         for palette_idx in range(16):
             palette_lower, palette_upper = palette_splits[palette_idx]
             # TODO: dynamically tune palette cuts
-            palette_pixels = self._colours_cam[palette_lower:palette_upper, :]
+            palette_pixels = self._colours_cam[
+                             palette_lower * 320:palette_upper * 320, :]
 
             palettes_rgb12_iigs, palette_error = \
                 dither_pyx.k_means_with_fixed_centroids(
