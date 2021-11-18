@@ -61,9 +61,25 @@ class ClusterPalette:
                 key=lambda kv: kv[1], reverse=True)]
 
         res = dither_pyx.convert_cam16ucs_to_rgb12_iigs(
-                clusters.cluster_centers_[frequency_order].astype(
-                    np.float32))
+            clusters.cluster_centers_[frequency_order].astype(
+                np.float32))
         return res
+
+    def _palette_splits(self, palette_band_width=3):
+        # The 16 palettes are striped across consecutive (overlapping) line
+        # ranges.  The basic unit is 200/16 = 12.5 lines, but we extend the
+        # line range to cover a multiple of this so that the palette ranges
+        # overlap.  Since nearby lines tend to have similar colours, this has
+        # the effect of smoothing out the colour transitions across palettes.
+
+        palette_ranges = []
+        for palette_idx in range(16):
+            p_lower = max(palette_idx + 0.5 - (palette_band_width / 2), 0)
+            p_upper = min(palette_idx + 0.5 + (palette_band_width / 2), 16)
+            palette_ranges.append(
+                (int(p_lower * (200 / 16)) * 320, int(p_upper * (200 / 16)) *
+                 320))
+        return palette_ranges
 
     def propose_palettes(self) -> Tuple[np.ndarray, np.ndarray, List[float]]:
         """Attempt to find new palettes that locally improve image quality.
@@ -93,19 +109,11 @@ class ClusterPalette:
 
         dynamic_colours = 16 - self._reserved_colours
 
-        # The 16 palettes are striped across consecutive (overlapping) line
-        # ranges.  The basic unit is 200/16 = 12.5 lines, but we extend the
-        # line range to cover a multiple of this so that the palette ranges
-        # overlap.  Since nearby lines tend to have similar colours, this has
-        # the effect of smoothing out the colour transitions across palettes.
-        palette_band_width = 3
+        palette_splits = self._palette_splits()
         for palette_idx in range(16):
-            p_lower = max(palette_idx + 0.5 - (palette_band_width / 2), 0)
-            p_upper = min(palette_idx + 0.5 + (palette_band_width / 2), 16)
+            palette_lower, palette_upper = palette_splits[palette_idx]
             # TODO: dynamically tune palette cuts
-            palette_pixels = self._colours_cam[
-                             int(p_lower * (200 / 16)) * 320:int(p_upper * (
-                                     200 / 16)) * 320, :]
+            palette_pixels = self._colours_cam[palette_lower:palette_upper, :]
 
             palettes_rgb12_iigs, palette_error = \
                 dither_pyx.k_means_with_fixed_centroids(
@@ -217,7 +225,6 @@ def main():
     total_image_error = 1e9
     iterations_since_improvement = 0
 
-    # palettes_iigs = np.empty((16, 16, 3), dtype=np.uint8)
     cluster_palette = ClusterPalette(
         rgb, reserved_colours=1, rgb12_iigs_to_cam16ucs=rgb12_iigs_to_cam16ucs)
 
@@ -293,7 +300,8 @@ def main():
             canvas.blit(surface, (0, 0))
             pygame.display.flip()
     # print((palettes_rgb * 255).astype(np.uint8))
-    unique_colours = np.unique(palettes_rgb12_iigs.reshape(-1, 3), axis=0).shape[0]
+    unique_colours = np.unique(
+        palettes_rgb12_iigs.reshape(-1, 3), axis=0).shape[0]
     print("%d unique colours" % unique_colours)
 
     # Save Double hi-res image
