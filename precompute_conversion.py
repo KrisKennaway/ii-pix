@@ -14,23 +14,23 @@ def srgb_to_linear_array(a: np.ndarray, gamma=2.4) -> np.ndarray:
     return np.where(a <= 0.04045, a / 12.92, ((a + 0.055) / 1.055) ** gamma)
 
 def main():
-    # print("Precomputing conversion matrix from 24-bit RGB to CAM16UCS colour "
-    #       "space")
-    # # Compute matrix of all 24-bit RGB values, normalized to 0..1 range
-    # bits24 = np.arange(2 ** 24, dtype=np.uint32).reshape(-1, 1)
-    # all_rgb24 = np.concatenate(
-    #     [bits24 >> 16 & 0xff, bits24 >> 8 & 0xff, bits24 & 0xff],
-    #     axis=1).astype(np.float32) / 255
-    # del bits24
-    #
-    # with colour.utilities.suppress_warnings(colour_usage_warnings=True):
-    #     # Compute matrix of corresponding CAM16UCS colour values, indexed
-    #     # by 24-bit RGB value
-    #     rgb24_to_cam16ucs = colour.convert(all_rgb24, "RGB", "CAM16UCS").astype(
-    #         np.float32)
-    # del all_rgb24
-    # np.save("data/rgb24_to_cam16ucs.npy", rgb24_to_cam16ucs)
-    # del rgb24_to_cam16ucs
+    print("Precomputing conversion matrix from 24-bit RGB to CAM16UCS colour "
+          "space")
+    # Compute matrix of all 24-bit RGB values, normalized to 0..1 range
+    bits24 = np.arange(2 ** 24, dtype=np.uint32).reshape(-1, 1)
+    all_rgb24 = np.concatenate(
+        [bits24 >> 16 & 0xff, bits24 >> 8 & 0xff, bits24 & 0xff],
+        axis=1).astype(np.float32) / 255
+    del bits24
+
+    with colour.utilities.suppress_warnings(colour_usage_warnings=True):
+        # Compute matrix of corresponding CAM16UCS colour values, indexed
+        # by 24-bit RGB value
+        rgb24_to_cam16ucs = colour.convert(all_rgb24, "RGB", "CAM16UCS").astype(
+            np.float32)
+    del all_rgb24
+    np.save("data/rgb24_to_cam16ucs.npy", rgb24_to_cam16ucs)
+    del rgb24_to_cam16ucs
 
     print("Precomputing conversion matrix from 12-bit //gs RGB to CAM16UCS "
           "colour space")
