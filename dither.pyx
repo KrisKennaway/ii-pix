@@ -157,7 +157,7 @@ cdef int dither_lookahead(Dither* dither, float[:, :, ::1] palette_cam16, float[
     return best
 
 
-@cython.boundscheck(True)
+@cython.boundscheck(False)
 @cython.wraparound(False)
 cdef inline float[::1] convert_rgb_to_cam16ucs(float[:, ::1] rgb_to_cam16ucs, float r, float g, float b) nogil:
     cdef unsigned int rgb_24bit = (<unsigned int>(r*255) << 16) + (<unsigned int>(g*255) << 8) + <unsigned int>(b*255)
@@ -489,8 +489,8 @@ cdef int best_palette_for_line(float [:, ::1] line_cam, float[:, :, ::1] palette
             best_palette_idx = palette_idx
     return best_palette_idx
 
-@cython.boundscheck(True)
-@cython.wraparound(True)
+@cython.boundscheck(False)
+@cython.wraparound(False)
 def convert_rgb12_iigs_to_cam(float [:, ::1] rgb12_iigs_to_cam16ucs, (unsigned char)[::1] point_rgb12) -> float[::1]:
     cdef int rgb12 = (point_rgb12[0] << 8) | (point_rgb12[1] << 4) | point_rgb12[2]
     return rgb12_iigs_to_cam16ucs[rgb12]
@@ -507,8 +507,8 @@ cdef float[::1] linear_to_srgb_array(float[::1] a, float gamma=2.4):
             res[i] = 1.055 * a[i] ** (1.0 / gamma) - 0.055
     return res
 
-@cython.boundscheck(True)
-@cython.wraparound(True)
+@cython.boundscheck(False)
+@cython.wraparound(False)
 def convert_cam16ucs_to_rgb12_iigs(float[::1] point_cam) -> int[::1]:  # XXX return type
     cdef float[::1] rgb, rgb12_iigs
     cdef int i
@@ -531,8 +531,8 @@ def convert_cam16ucs_to_rgb12_iigs(float[::1] point_cam) -> int[::1]:  # XXX ret
     return np.round(rgb12_iigs).astype(np.uint8)
 
 
-@cython.boundscheck(True)
-@cython.wraparound(True)
+@cython.boundscheck(False)
+@cython.wraparound(False)
 def k_means_with_fixed_centroids(
     int n_clusters, int n_fixed, float[:, ::1] samples, (unsigned char)[:, ::1] initial_centroids, int max_iterations,
     float tolerance, float [:, ::1] rgb12_iigs_to_cam16ucs):

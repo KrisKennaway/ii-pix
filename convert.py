@@ -109,12 +109,6 @@ class ClusterPalette:
                              int(p_lower * (200 / 16)) * 320:int(p_upper * (
                                      200 / 16)) * 320, :]
 
-            # TODO: clustering should be aware of the fact that we will
-            #  quantize to a 4-bit RGB value afterwards.  i.e. we should
-            #  not pick multiple centroids that will quantize to the same RGB
-            #  value since we'll "waste" a palette entry.  This doesn't seem to
-            #  be a major issue in practise though, and fixing it would require
-            #  implementing our own (optimized) k-means.
             # TODO: tune tolerance
             # clusters = cluster.MiniBatchKMeans(
             #     n_clusters=16, max_iter=10000,
@@ -242,7 +236,7 @@ def main():
 
     # TODO: flags
     penalty = 1e9
-    iterations = 10  # 50
+    iterations = 50
 
     pygame.init()
     # TODO: for some reason I need to execute this twice - the first time
