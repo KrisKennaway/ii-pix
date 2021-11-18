@@ -107,15 +107,6 @@ class ClusterPalette:
                              int(p_lower * (200 / 16)) * 320:int(p_upper * (
                                      200 / 16)) * 320, :]
 
-            # TODO: tune tolerance
-            # clusters = cluster.MiniBatchKMeans(
-            #     n_clusters=16, max_iter=10000,
-            #     init=self._global_palette,
-            #     n_init=1)
-            # clusters.fit_predict(palette_pixels)
-            #
-            # palette_error = clusters.inertia_
-
             palettes_rgb12_iigs, palette_error = \
                 dither_pyx.k_means_with_fixed_centroids(
                     n_clusters=16, n_fixed=self._reserved_colours,
@@ -138,27 +129,6 @@ class ClusterPalette:
                         self._rgb12_iigs_to_cam16ucs, palettes_rgb12_iigs[
                             i]), dtype=np.float32))
 
-            # Suppress divide by zero warning,
-            # https://github.com/colour-science/colour/issues/900
-            # with colour.utilities.suppress_warnings(python_warnings=True):
-            #     palette_rgb = colour.convert(
-            #         new_palettes_cam[palette_idx, :, :], "CAM16UCS", "RGB")
-            # palette_rgb_rec601 = np.clip(image_py.srgb_to_linear(
-            #     colour.YCbCr_to_RGB(
-            #         colour.RGB_to_YCbCr(
-            #             image_py.linear_to_srgb(palette_rgb * 255) / 255,
-            #             K=colour.WEIGHTS_YCBCR['ITU-R BT.709']),
-            #         K=colour.WEIGHTS_YCBCR['ITU-R BT.601']) * 255) / 255, 0, 1)
-            # palette_rgb = np.clip(
-            #     image_py.srgb_to_linear(
-            #         colour.YCbCr_to_RGB(
-            #             colour.RGB_to_YCbCr(
-            #                 image_py.linear_to_srgb(
-            #                     palette_rgb[:, :] * 255) / 255,
-            #                 K=colour.WEIGHTS_YCBCR['ITU-R BT.709']),
-            #             K=colour.WEIGHTS_YCBCR[
-            #                 'ITU-R BT.601']) * 255) / 255,
-            #     0, 1)
             new_palettes_rgb12_iigs[palette_idx, :, :] = palettes_rgb12_iigs
             new_errors[palette_idx] = palette_error
 
@@ -285,15 +255,6 @@ def main():
         total_image_error = new_total_image_error
         palettes_rgb12_iigs = new_palettes_rgb12_iigs
         palettes_linear_rgb = new_palettes_linear_rgb
-        # # Recompute 4-bit //gs RGB palettes
-        # palette_rgb_rec601 = np.clip(
-        #     colour.YCbCr_to_RGB(
-        #         colour.RGB_to_YCbCr(
-        #             image_py.linear_to_srgb(palettes_rgb12_iigs * 255) / 255,
-        #             K=colour.WEIGHTS_YCBCR['ITU-R BT.709']),
-        #         K=colour.WEIGHTS_YCBCR['ITU-R BT.601']), 0, 1)
-        #
-        # palettes_iigs = np.round(palette_rgb_rec601 * 15).astype(np.uint8)
         for i in range(16):
             screen.set_palette(i, palettes_rgb12_iigs[i, :, :])
 
@@ -303,16 +264,9 @@ def main():
         for i in range(200):
             screen.line_palette[i] = line_to_palette[i]
             output_rgb[i, :, :] = (
-                    palettes_linear_rgb[line_to_palette[i]][output_4bit[i, :]] * 255
-            ).astype(
-                # np.round(palettes_rgb[line_to_palette[i]][
-                #              output_4bit[i, :]] * 15) / 15 * 255).astype(
-                np.uint8)
-        # output_srgb_rec709 = np.clip(colour.YCbCr_to_RGB(
-        #     colour.RGB_to_YCbCr(
-        #         image_py.linear_to_srgb(output_rgb) / 255,
-        #         K=colour.WEIGHTS_YCBCR['ITU-R BT.601']),
-        #     K=colour.WEIGHTS_YCBCR['ITU-R BT.709']), 0, 1) * 255
+                    palettes_linear_rgb[line_to_palette[i]][
+                        output_4bit[i, :]] * 255
+            ).astype(np.uint8)
 
         output_srgb = (image_py.linear_to_srgb(output_rgb)).astype(np.uint8)
 
