@@ -60,10 +60,8 @@ class ClusterPalette:
                 list(zip(*np.unique(labels, return_counts=True))),
                 key=lambda kv: kv[1], reverse=True)]
 
-        res = np.empty((16, 3), dtype=np.uint8)
-        for i in range(16):
-            res[i, :] = dither_pyx.convert_cam16ucs_to_rgb12_iigs(
-                clusters.cluster_centers_[frequency_order][i].astype(
+        res = dither_pyx.convert_cam16ucs_to_rgb12_iigs(
+                clusters.cluster_centers_[frequency_order].astype(
                     np.float32))
         return res
 
@@ -254,7 +252,6 @@ def main():
         rgb, reserved_colours=1, rgb12_iigs_to_cam16ucs=rgb12_iigs_to_cam16ucs)
 
     while iterations_since_improvement < iterations:
-        print(iterations_since_improvement)
         new_palettes_cam, new_palettes_rgb12_iigs, new_palette_errors = (
             cluster_palette.propose_palettes())
 
