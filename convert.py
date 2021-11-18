@@ -82,11 +82,10 @@ class ClusterPalette:
 
         palette_ranges = []
         for palette_idx in range(16):
-            palette_lower = int(
-                palette_idx * (palette_height - palette_overlap))
+            palette_lower = palette_idx * (palette_height - palette_overlap)
             palette_upper = palette_lower + palette_height
-            palette_ranges.append((palette_lower, palette_upper))
-        assert palette_upper == 200
+            palette_ranges.append((int(np.round(palette_lower)),
+                                   int(np.round(palette_upper))))
         # print(palette_ranges)
         return palette_ranges
 
