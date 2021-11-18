@@ -254,6 +254,7 @@ def main():
         rgb, reserved_colours=1, rgb12_iigs_to_cam16ucs=rgb12_iigs_to_cam16ucs)
 
     while iterations_since_improvement < iterations:
+        print(iterations_since_improvement)
         new_palettes_cam, new_palettes_rgb12_iigs, new_palette_errors = (
             cluster_palette.propose_palettes())
 

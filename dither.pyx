@@ -491,12 +491,17 @@ cdef int best_palette_for_line(float [:, ::1] line_cam, float[:, :, ::1] palette
 
 @cython.boundscheck(False)
 @cython.wraparound(False)
-def convert_rgb12_iigs_to_cam(float [:, ::1] rgb12_iigs_to_cam16ucs, (unsigned char)[::1] point_rgb12) -> float[::1]:
+cdef float[::1] _convert_rgb12_iigs_to_cam(float [:, ::1] rgb12_iigs_to_cam16ucs, (unsigned char)[::1] point_rgb12):
     cdef int rgb12 = (point_rgb12[0] << 8) | (point_rgb12[1] << 4) | point_rgb12[2]
     return rgb12_iigs_to_cam16ucs[rgb12]
 
+def convert_rgb12_iigs_to_cam(float [:, ::1] rgb12_iigs_to_cam16ucs, (unsigned char)[::1] point_rgb12) -> float[::1]:
+    return _convert_rgb12_iigs_to_cam(rgb12_iigs_to_cam16ucs, point_rgb12)
+
 import colour
 
+@cython.boundscheck(False)
+@cython.wraparound(False)
 cdef float[::1] linear_to_srgb_array(float[::1] a, float gamma=2.4):
     cdef int i
     cdef float[::1] res = np.empty(3, dtype=np.float32)
@@ -509,7 +514,7 @@ cdef float[::1] linear_to_srgb_array(float[::1] a, float gamma=2.4):
 
 @cython.boundscheck(False)
 @cython.wraparound(False)
-def convert_cam16ucs_to_rgb12_iigs(float[::1] point_cam) -> int[::1]:  # XXX return type
+cdef (unsigned char)[::1] _convert_cam16ucs_to_rgb12_iigs(float[::1] point_cam):
     cdef float[::1] rgb, rgb12_iigs
     cdef int i
 
@@ -530,6 +535,9 @@ def convert_cam16ucs_to_rgb12_iigs(float[::1] point_cam) -> int[::1]:  # XXX ret
 
     return np.round(rgb12_iigs).astype(np.uint8)
 
+
+def convert_cam16ucs_to_rgb12_iigs(float[::1] point_cam):
+    return _convert_cam16ucs_to_rgb12_iigs(point_cam)
 
 @cython.boundscheck(False)
 @cython.wraparound(False)
@@ -567,7 +575,7 @@ def k_means_with_fixed_centroids(
             closest_centroid_idx = 0
             for centroid_idx in range(n_clusters):
                 centroid_rgb12 = centroids_rgb12[centroid_idx, :]
-                error = colour_distance_squared(convert_rgb12_iigs_to_cam(rgb12_iigs_to_cam16ucs, centroid_rgb12), point_cam)
+                error = colour_distance_squared(_convert_rgb12_iigs_to_cam(rgb12_iigs_to_cam16ucs, centroid_rgb12), point_cam)
                 if error < best_error:
                     best_error = error
                     closest_centroid_idx = centroid_idx
@@ -582,8 +590,8 @@ def k_means_with_fixed_centroids(
                     new_centroid_cam[i] = (
                         centroid_cam_sample_positions_total[centroid_idx, i] / centroid_sample_counts[centroid_idx])
                 centroid_movement += colour_distance_squared(
-                    convert_rgb12_iigs_to_cam(rgb12_iigs_to_cam16ucs, centroids_rgb12[centroid_idx]), new_centroid_cam)
-                new_centroid_rgb12 = convert_cam16ucs_to_rgb12_iigs(new_centroid_cam)
+                    _convert_rgb12_iigs_to_cam(rgb12_iigs_to_cam16ucs, centroids_rgb12[centroid_idx]), new_centroid_cam)
+                new_centroid_rgb12 = _convert_cam16ucs_to_rgb12_iigs(new_centroid_cam)
                 for i in range(3):
                     if centroids_rgb12[centroid_idx, i] != new_centroid_rgb12[i]:
                         # print(i, centroids_rgb12[centroid_idx, i], new_centroid_rgb12[i])
