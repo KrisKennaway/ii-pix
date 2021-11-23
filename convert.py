@@ -83,13 +83,10 @@ class ClusterPalette:
 
         clusters = cluster.MiniBatchKMeans(n_clusters=16, max_iter=10000)
         clusters.fit_predict(self._colours_cam)
-        num_colours = clusters.n_clusters
-
-        labels = clusters.labels_
 
         # Dict of {palette idx : frequency count}
         palette_freq = {idx: 0 for idx in range(16)}
-        for idx, freq in zip(*np.unique(labels, return_counts=True)):
+        for idx, freq in zip(*np.unique(clusters.labels_, return_counts=True)):
             palette_freq[idx] = freq
         frequency_order = [
             k for k, v in sorted(
