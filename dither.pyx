@@ -360,8 +360,7 @@ def dither_shr(
             line_cam[x, :] = convert_rgb_to_cam16ucs(
                 rgb_to_cam16ucs, working_image[y,x,0], working_image[y,x,1], working_image[y,x,2])
 
-        # TODO: needs to be aware of splits
-        best_palette = best_palette_for_line(line_cam, palettes_cam, <int>(y * 16 / 200), best_palette, penalty)
+        best_palette = best_palette_for_line(line_cam, palettes_cam, best_palette, penalty)
         palette_rgb = palettes_rgb[best_palette, :, :]
         palette_cam = palettes_cam[best_palette, :, :]
         line_to_palette[y] = best_palette
@@ -452,9 +451,10 @@ def dither_shr(
 
     return np.array(output_4bit, dtype=np.uint8), line_to_palette, total_image_error
 
+
 @cython.boundscheck(False)
 @cython.wraparound(False)
-cdef int best_palette_for_line(float [:, ::1] line_cam, float[:, :, ::1] palettes_cam, int base_palette_idx, int last_palette_idx, float last_penalty) nogil:
+cdef int best_palette_for_line(float [:, ::1] line_cam, float[:, :, ::1] palettes_cam, int last_palette_idx, float last_penalty) nogil:
     cdef int palette_idx, best_palette_idx, palette_entry_idx, pixel_idx
     cdef double best_total_dist, total_dist, best_pixel_dist, pixel_dist
     cdef float[:, ::1] palette_cam
@@ -466,12 +466,7 @@ cdef int best_palette_for_line(float [:, ::1] line_cam, float[:, :, ::1] palette
     cdef int line_size = line_cam.shape[0]
     for palette_idx in range(16):
         palette_cam = palettes_cam[palette_idx, :, :]
-        if palette_idx < (base_palette_idx - 1) or palette_idx > (base_palette_idx + 1):
-            continue
-        if palette_idx == last_palette_idx:
-            penalty = last_penalty
-        else:
-            penalty = 1.0
+        penalty = last_penalty if palette_idx == last_palette_idx else 1.0
         total_dist = 0
         for pixel_idx in range(line_size):
             pixel_cam = line_cam[pixel_idx]
@@ -486,11 +481,13 @@ cdef int best_palette_for_line(float [:, ::1] line_cam, float[:, :, ::1] palette
             best_palette_idx = palette_idx
     return best_palette_idx
 
+
 @cython.boundscheck(False)
 @cython.wraparound(False)
 cdef float[::1] _convert_rgb12_iigs_to_cam(float [:, ::1] rgb12_iigs_to_cam16ucs, (unsigned char)[::1] point_rgb12):
     cdef int rgb12 = (point_rgb12[0] << 8) | (point_rgb12[1] << 4) | point_rgb12[2]
     return rgb12_iigs_to_cam16ucs[rgb12]
+
 
 def convert_rgb12_iigs_to_cam(float [:, ::1] rgb12_iigs_to_cam16ucs, (unsigned char)[::1] point_rgb12) -> float[::1]:
     return _convert_rgb12_iigs_to_cam(rgb12_iigs_to_cam16ucs, point_rgb12)
