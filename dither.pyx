@@ -343,9 +343,9 @@ def dither_shr(
         float[:,::1] rgb_to_cam16ucs, float penalty):
     cdef int y, x, idx, best_colour_idx, best_palette, i
     cdef double best_distance, distance, total_image_error
-    cdef float[::1] best_colour_rgb, pixel_cam, colour_rgb, colour_cam
+    cdef float[::1] best_colour_rgb, pixel_cam
     cdef float quant_error
-    cdef float[:, ::1] palette_rgb
+    cdef float[:, ::1] palette_rgb, palette_cam
 
     cdef (unsigned char)[:, ::1] output_4bit = np.zeros((200, 320), dtype=np.uint8)
     cdef float[:, :, ::1] working_image = np.copy(input_rgb)
@@ -353,16 +353,17 @@ def dither_shr(
 
     cdef int[::1] line_to_palette = np.zeros(200, dtype=np.int32)
 
-    best_palette = 15
+    best_palette = -1
     total_image_error = 0.0
     for y in range(200):
         for x in range(320):
-            colour_cam = convert_rgb_to_cam16ucs(
+            line_cam[x, :] = convert_rgb_to_cam16ucs(
                 rgb_to_cam16ucs, working_image[y,x,0], working_image[y,x,1], working_image[y,x,2])
-            line_cam[x, :] = colour_cam
 
+        # TODO: needs to be aware of splits
         best_palette = best_palette_for_line(line_cam, palettes_cam, <int>(y * 16 / 200), best_palette, penalty)
         palette_rgb = palettes_rgb[best_palette, :, :]
+        palette_cam = palettes_cam[best_palette, :, :]
         line_to_palette[y] = best_palette
 
         for x in range(320):
@@ -372,9 +373,7 @@ def dither_shr(
             best_distance = 1e9
             best_colour_idx = -1
             for idx in range(16):
-                colour_rgb = palette_rgb[idx, :]
-                colour_cam = convert_rgb_to_cam16ucs(rgb_to_cam16ucs, colour_rgb[0], colour_rgb[1], colour_rgb[2])
-                distance = colour_distance_squared(pixel_cam, colour_cam)
+                distance = colour_distance_squared(pixel_cam, palette_cam[idx, :])
                 if distance < best_distance:
                     best_distance = distance
                     best_colour_idx = idx
@@ -459,7 +458,7 @@ cdef int best_palette_for_line(float [:, ::1] line_cam, float[:, :, ::1] palette
     cdef int palette_idx, best_palette_idx, palette_entry_idx, pixel_idx
     cdef double best_total_dist, total_dist, best_pixel_dist, pixel_dist
     cdef float[:, ::1] palette_cam
-    cdef float[::1] pixel_cam, palette_entry
+    cdef float[::1] pixel_cam
 
     best_total_dist = 1e9
     best_palette_idx = -1
@@ -474,16 +473,14 @@ cdef int best_palette_for_line(float [:, ::1] line_cam, float[:, :, ::1] palette
         else:
             penalty = 1.0
         total_dist = 0
-        best_pixel_dist = 1e9
         for pixel_idx in range(line_size):
             pixel_cam = line_cam[pixel_idx]
+            best_pixel_dist = 1e9
             for palette_entry_idx in range(16):
-                palette_entry = palette_cam[palette_entry_idx, :]
-                pixel_dist = colour_distance_squared(pixel_cam, palette_entry) * penalty
+                pixel_dist = colour_distance_squared(pixel_cam, palette_cam[palette_entry_idx, :]) * penalty
                 if pixel_dist < best_pixel_dist:
                     best_pixel_dist = pixel_dist
             total_dist += best_pixel_dist
-            # print(total_dist)
         if total_dist < best_total_dist:
             best_total_dist = total_dist
             best_palette_idx = palette_idx
@@ -604,8 +601,6 @@ def k_means_with_fixed_centroids(
                 if centroids_rgb12[centroid_idx + n_fixed, i] != new_centroids_rgb12[centroid_idx, i]:
                     centroids_rgb12[centroid_idx + n_fixed, i] = new_centroids_rgb12[centroid_idx, i]
                     centroid_moved = 1
-
-        # print(iteration, centroid_movement, total_error, centroids_rgb12)
 
         if centroid_movement < tolerance:
             break
