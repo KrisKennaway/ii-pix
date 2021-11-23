@@ -61,7 +61,7 @@ class ClusterPalette:
 
         # List of line ranges used to train the 16 SHR palettes
         # [(lower_0, upper_0), ...]
-        self._palette_splits = self._palette_splits()
+        self._palette_splits = self._equal_palette_splits()
 
         # Whether the previous iteration of proposed palettes was accepted
         self._palettes_accepted = False
@@ -123,29 +123,7 @@ class ClusterPalette:
                                          "CAM16UCS").astype(np.float32)
         return colours_cam
 
-    def _fit_global_palette(self):
-        """Compute a 16-colour palette for the entire image to use as
-        starting point for the sub-palettes.  This should help when the image
-        has large blocks of colour since the sub-palettes will tend to pick the
-        same colours."""
-
-        clusters = cluster.MiniBatchKMeans(n_clusters=16, max_iter=10000)
-        clusters.fit_predict(self._colours_cam)
-
-        # Dict of {palette idx : frequency count}
-        palette_freq = {idx: 0 for idx in range(16)}
-        for idx, freq in zip(*np.unique(clusters.labels_, return_counts=True)):
-            palette_freq[idx] = freq
-        frequency_order = [
-            k for k, v in sorted(
-                list(palette_freq.items()), key=lambda kv: kv[1], reverse=True)]
-
-        self._global_palette = (
-            dither_pyx.convert_cam16ucs_to_rgb12_iigs(
-                clusters.cluster_centers_[frequency_order].astype(
-                    np.float32)))
-
-    def _palette_splits(self, palette_height=35):
+    def _equal_palette_splits(self, palette_height=35):
         # The 16 palettes are striped across consecutive (overlapping) line
         # ranges.  Since nearby lines tend to have similar colours, this has
         # the effect of smoothing out the colour transitions across palettes.
@@ -167,77 +145,6 @@ class ClusterPalette:
             palette_ranges.append((int(np.round(palette_lower)),
                                    int(np.round(palette_upper))))
         return palette_ranges
-
-    def _apply_palette_delta(
-            self, palette_to_mutate, palette_lower_delta, palette_upper_delta):
-        old_lower, old_upper = self._palette_splits[palette_to_mutate]
-        new_lower = old_lower + palette_lower_delta
-        new_upper = old_upper + palette_upper_delta
-
-        new_lower = np.clip(new_lower, 0, np.clip(new_upper, 1, 200) - 1)
-        new_upper = np.clip(new_upper, new_lower + 1, 200)
-        assert new_lower >= 0, new_upper - 1
-
-        self._palette_splits[palette_to_mutate] = (new_lower, new_upper)
-        self._palette_mutate_idx = palette_to_mutate
-        self._palette_mutate_delta = (palette_lower_delta, palette_upper_delta)
-
-    def _mutate_palette_splits(self):
-        if self._palettes_accepted:
-            # Last time was good, keep going
-            self._apply_palette_delta(self._palette_mutate_idx,
-                                      self._palette_mutate_delta[0],
-                                      self._palette_mutate_delta[1])
-        else:
-            # undo last mutation
-            self._apply_palette_delta(self._palette_mutate_idx,
-                                      -self._palette_mutate_delta[0],
-                                      -self._palette_mutate_delta[1])
-
-            # Pick a palette endpoint to move up or down
-            palette_to_mutate = np.random.randint(0, 16)
-            while True:
-                if palette_to_mutate > 0:
-                    palette_lower_delta = np.random.randint(-20, 21)
-                else:
-                    palette_lower_delta = 0
-                if palette_to_mutate < 15:
-                    palette_upper_delta = np.random.randint(-20, 21)
-                else:
-                    palette_upper_delta = 0
-                if palette_lower_delta != 0 or palette_upper_delta != 0:
-                    break
-
-            self._apply_palette_delta(palette_to_mutate, palette_lower_delta,
-                                      palette_upper_delta)
-
-    def _reassign_unused_palettes(self, new_line_to_palette, last_good_splits):
-        palettes_used = [False] * 16
-        for palette in new_line_to_palette:
-            palettes_used[palette] = True
-        for palette_idx, palette_used in enumerate(palettes_used):
-            if palette_used:
-                continue
-            print("Reassigning palette %d" % palette_idx)
-            max_width = 0
-            split_palette_idx = -1
-            idx = 0
-            for lower, upper in last_good_splits:
-                width = upper - lower
-                if width > max_width:
-                    split_palette_idx = idx
-                idx += 1
-
-            lower, upper = last_good_splits[split_palette_idx]
-            if upper - lower > 20:
-                mid = (lower + upper) // 2
-                self._palette_splits[split_palette_idx] = (
-                    lower, mid - 1)
-                self._palette_splits[palette_idx] = (mid, upper)
-            else:
-                lower = np.random.randint(0, 199)
-                upper = np.random.randint(lower, 200)
-                self._palette_splits[palette_idx] = (lower, upper)
 
     def _propose_palettes(self) -> Tuple[np.ndarray, np.ndarray, List[float]]:
         """Attempt to find new palettes that locally improve image quality.
@@ -268,7 +175,6 @@ class ClusterPalette:
         self._mutate_palette_splits()
         for palette_idx in range(16):
             palette_lower, palette_upper = self._palette_splits[palette_idx]
-            # TODO: dynamically tune palette cuts
             palette_pixels = self._colours_cam[
                              palette_lower * 320:palette_upper * 320, :]
 
@@ -299,6 +205,99 @@ class ClusterPalette:
 
         self._palettes_accepted = False
         return new_palettes_cam, new_palettes_rgb12_iigs, new_errors
+
+    def _fit_global_palette(self):
+        """Compute a 16-colour palette for the entire image to use as
+        starting point for the sub-palettes.  This should help when the image
+        has large blocks of colour since the sub-palettes will tend to pick the
+        same colours."""
+
+        clusters = cluster.MiniBatchKMeans(n_clusters=16, max_iter=10000)
+        clusters.fit_predict(self._colours_cam)
+
+        # Dict of {palette idx : frequency count}
+        palette_freq = {idx: 0 for idx in range(16)}
+        for idx, freq in zip(*np.unique(clusters.labels_, return_counts=True)):
+            palette_freq[idx] = freq
+        frequency_order = [
+            k for k, v in sorted(
+                list(palette_freq.items()), key=lambda kv: kv[1], reverse=True)]
+
+        self._global_palette = (
+            dither_pyx.convert_cam16ucs_to_rgb12_iigs(
+                clusters.cluster_centers_[frequency_order].astype(
+                    np.float32)))
+
+    def _mutate_palette_splits(self):
+        if self._palettes_accepted:
+            # Last time was good, keep going
+            self._apply_palette_delta(self._palette_mutate_idx,
+                                      self._palette_mutate_delta[0],
+                                      self._palette_mutate_delta[1])
+        else:
+            # undo last mutation
+            self._apply_palette_delta(self._palette_mutate_idx,
+                                      -self._palette_mutate_delta[0],
+                                      -self._palette_mutate_delta[1])
+
+            # Pick a palette endpoint to move up or down
+            palette_to_mutate = np.random.randint(0, 16)
+            while True:
+                if palette_to_mutate > 0:
+                    palette_lower_delta = np.random.randint(-20, 21)
+                else:
+                    palette_lower_delta = 0
+                if palette_to_mutate < 15:
+                    palette_upper_delta = np.random.randint(-20, 21)
+                else:
+                    palette_upper_delta = 0
+                if palette_lower_delta != 0 or palette_upper_delta != 0:
+                    break
+
+            self._apply_palette_delta(palette_to_mutate, palette_lower_delta,
+                                      palette_upper_delta)
+
+    def _apply_palette_delta(
+            self, palette_to_mutate, palette_lower_delta, palette_upper_delta):
+        old_lower, old_upper = self._palette_splits[palette_to_mutate]
+        new_lower = old_lower + palette_lower_delta
+        new_upper = old_upper + palette_upper_delta
+
+        new_lower = np.clip(new_lower, 0, np.clip(new_upper, 1, 200) - 1)
+        new_upper = np.clip(new_upper, new_lower + 1, 200)
+        assert new_lower >= 0, new_upper - 1
+
+        self._palette_splits[palette_to_mutate] = (new_lower, new_upper)
+        self._palette_mutate_idx = palette_to_mutate
+        self._palette_mutate_delta = (palette_lower_delta, palette_upper_delta)
+
+    def _reassign_unused_palettes(self, new_line_to_palette, last_good_splits):
+        palettes_used = [False] * 16
+        for palette in new_line_to_palette:
+            palettes_used[palette] = True
+        for palette_idx, palette_used in enumerate(palettes_used):
+            if palette_used:
+                continue
+            print("Reassigning palette %d" % palette_idx)
+            max_width = 0
+            split_palette_idx = -1
+            idx = 0
+            for lower, upper in last_good_splits:
+                width = upper - lower
+                if width > max_width:
+                    split_palette_idx = idx
+                idx += 1
+
+            lower, upper = last_good_splits[split_palette_idx]
+            if upper - lower > 20:
+                mid = (lower + upper) // 2
+                self._palette_splits[split_palette_idx] = (
+                    lower, mid - 1)
+                self._palette_splits[palette_idx] = (mid, upper)
+            else:
+                lower = np.random.randint(0, 199)
+                upper = np.random.randint(lower, 200)
+                self._palette_splits[palette_idx] = (lower, upper)
 
 
 def main():
