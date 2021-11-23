@@ -72,6 +72,36 @@ class ClusterPalette:
         # Delta applied to palette split in previous iteration
         self._palette_mutate_delta = (0, 0)
 
+    def _image_colours_cam(self, image: Image):
+        colours_rgb = np.asarray(image).reshape((-1, 3))
+        with colour.utilities.suppress_warnings(colour_usage_warnings=True):
+            colours_cam = colour.convert(colours_rgb, "RGB",
+                                         "CAM16UCS").astype(np.float32)
+        return colours_cam
+
+    def _equal_palette_splits(self, palette_height=35):
+        # The 16 palettes are striped across consecutive (overlapping) line
+        # ranges.  Since nearby lines tend to have similar colours, this has
+        # the effect of smoothing out the colour transitions across palettes.
+
+        # If we want to overlap 16 palettes in 200 lines, where each palette
+        # has height H and overlaps the previous one by L lines, then the
+        # boundaries are at lines:
+        #   (0, H), (H-L, 2H-L), (2H-2L, 3H-2L), ..., (15H-15L, 16H - 15L)
+        # i.e. 16H - 15L = 200, so for a given palette height H we need to
+        # overlap by:
+        #   L = (16H - 200)/15
+
+        palette_overlap = (16 * palette_height - 200) / 15
+
+        palette_ranges = []
+        for palette_idx in range(16):
+            palette_lower = palette_idx * (palette_height - palette_overlap)
+            palette_upper = palette_lower + palette_height
+            palette_ranges.append((int(np.round(palette_lower)),
+                                   int(np.round(palette_upper))))
+        return palette_ranges
+
     def iterate(self, penalty: float, max_iterations: int):
         iterations_since_improvement = 0
         total_image_error = 1e9
@@ -115,36 +145,6 @@ class ClusterPalette:
 
             yield (new_total_image_error, new_output_4bit, new_line_to_palette,
                    new_palettes_rgb12_iigs, new_palettes_linear_rgb)
-
-    def _image_colours_cam(self, image: Image):
-        colours_rgb = np.asarray(image).reshape((-1, 3))
-        with colour.utilities.suppress_warnings(colour_usage_warnings=True):
-            colours_cam = colour.convert(colours_rgb, "RGB",
-                                         "CAM16UCS").astype(np.float32)
-        return colours_cam
-
-    def _equal_palette_splits(self, palette_height=35):
-        # The 16 palettes are striped across consecutive (overlapping) line
-        # ranges.  Since nearby lines tend to have similar colours, this has
-        # the effect of smoothing out the colour transitions across palettes.
-
-        # If we want to overlap 16 palettes in 200 lines, where each palette
-        # has height H and overlaps the previous one by L lines, then the
-        # boundaries are at lines:
-        #   (0, H), (H-L, 2H-L), (2H-2L, 3H-2L), ..., (15H-15L, 16H - 15L)
-        # i.e. 16H - 15L = 200, so for a given palette height H we need to
-        # overlap by:
-        #   L = (16H - 200)/15
-
-        palette_overlap = (16 * palette_height - 200) / 15
-
-        palette_ranges = []
-        for palette_idx in range(16):
-            palette_lower = palette_idx * (palette_height - palette_overlap)
-            palette_upper = palette_lower + palette_height
-            palette_ranges.append((int(np.round(palette_lower)),
-                                   int(np.round(palette_upper))))
-        return palette_ranges
 
     def _propose_palettes(self) -> Tuple[np.ndarray, np.ndarray, List[float]]:
         """Attempt to find new palettes that locally improve image quality.
