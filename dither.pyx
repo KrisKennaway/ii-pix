@@ -543,7 +543,7 @@ def k_means_with_fixed_centroids(
     cdef double error, best_error, centroid_movement, total_error
     cdef int centroid_idx, closest_centroid_idx, i, point_idx
 
-    cdef (unsigned char)[:, ::1] centroids_rgb12 = initial_centroids[:, :]
+    cdef (unsigned char)[:, ::1] centroids_rgb12 = np.copy(initial_centroids)
     cdef (unsigned char)[:, ::1] new_centroids_rgb12
 
     cdef float[::1] point_cam
