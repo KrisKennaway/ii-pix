@@ -147,11 +147,10 @@ class ClusterPalette:
             inner_iterations_since_improvement = 0
             self._palette_lines = self._init_palette_lines()
 
-            self._fit_global_palette()
             while inner_iterations_since_improvement < max_inner_iterations:
                 # print("Iterations %d" % inner_iterations_since_improvement)
                 new_palettes_cam, new_palettes_rgb12_iigs = (
-                    self._propose_palettes())
+                    self._fit_shr_palettes())
 
                 # Recompute image with proposed palettes and check whether it
                 # has lower total image error than our previous best.
@@ -180,7 +179,7 @@ class ClusterPalette:
                        new_palettes_rgb12_iigs, palettes_linear_rgb)
             outer_iterations_since_improvement += 1
 
-    def _propose_palettes(self) -> Tuple[np.ndarray, np.ndarray]:
+    def _fit_shr_palettes(self) -> Tuple[np.ndarray, np.ndarray]:
         """Attempt to find new palettes that locally improve image quality.
 
         Re-fit a set of 16 palettes from (overlapping) line ranges of the
