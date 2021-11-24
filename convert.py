@@ -331,13 +331,14 @@ def main():
              '(default: 0)'
     )
     parser.add_argument(
-        '--save-preview', type=bool, default=True,
+        '--save-preview', action=argparse.BooleanOptionalAction, default=True,
         help='Whether to save a .PNG rendering of the output image (default: '
              'True)'
     )
     parser.add_argument(
-        '--show-final-score', type=bool, default=False,
-        help='Whether to output the final image quality score (default: False)'
+        '--show-final-score', action=argparse.BooleanOptionalAction,
+        default=False, help='Whether to output the final image quality score '
+                            '(default: False)'
     )
     args = parser.parse_args()
     if args.lookahead < 1:
