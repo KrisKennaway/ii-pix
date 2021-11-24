@@ -120,16 +120,9 @@ class ClusterPalette:
     def iterate(self, penalty: float, max_iterations: int):
         iterations_since_improvement = 0
         total_image_error = 1e9
-
         last_good_splits = self._palette_splits
-        (output_4bit, line_to_palette, palettes_linear_rgb,
-         new_total_image_error) = self._dither_image(
-            self._palettes_cam, penalty)
-
+        
         while iterations_since_improvement < max_iterations:
-            self._reassign_unused_palettes(line_to_palette,
-                                           last_good_splits)
-
             # print("Iterations %d" % iterations_since_improvement)
             new_palettes_cam, new_palettes_rgb12_iigs, new_palette_errors = (
                 self._propose_palettes())
@@ -139,6 +132,9 @@ class ClusterPalette:
             (output_4bit, line_to_palette, palettes_linear_rgb,
              new_total_image_error) = self._dither_image(
                 new_palettes_cam, penalty)
+
+            self._reassign_unused_palettes(line_to_palette,
+                                           last_good_splits)
 
             if new_total_image_error >= total_image_error:
                 iterations_since_improvement += 1
@@ -175,8 +171,8 @@ class ClusterPalette:
         using accept_palettes().
         """
         new_errors = list(self._errors)
-        new_palettes_cam = np.copy(self._palettes_cam)
-        new_palettes_rgb12_iigs = np.copy(self._palettes_rgb)
+        new_palettes_cam = np.empty_like(self._palettes_cam)
+        new_palettes_rgb12_iigs = np.empty_like(self._palettes_rgb)
 
         # Compute a new 16-colour global palette for the entire image,
         # used as the starting center positions for k-means clustering of the
@@ -307,7 +303,7 @@ class ClusterPalette:
                 self._palette_splits[palette_idx] = (mid, upper)
             else:
                 lower = np.random.randint(0, 199)
-                upper = np.random.randint(lower, 200)
+                upper = np.random.randint(lower + 1, 200)
                 self._palette_splits[palette_idx] = (lower, upper)
 
 
