@@ -328,11 +328,13 @@ def main():
     )
     parser.add_argument(
         '--fixed-colours', type=int, default=0,
-        help='How many colours to fix as identical across all 16 SHR palettes'
+        help='How many colours to fix as identical across all 16 SHR palettes '
+        '(default: 0)'
     )
     parser.add_argument(
         '--save-preview', type=bool, default=True,
-        help='Whether to save a .PNG rendering of the output image'
+        help='Whether to save a .PNG rendering of the output image (default: '
+             'True)'
     )
     args = parser.parse_args()
     if args.lookahead < 1:
