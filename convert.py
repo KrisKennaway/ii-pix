@@ -121,7 +121,7 @@ class ClusterPalette:
         iterations_since_improvement = 0
         total_image_error = 1e9
         last_good_splits = self._palette_splits
-        
+
         while iterations_since_improvement < max_iterations:
             # print("Iterations %d" % iterations_since_improvement)
             new_palettes_cam, new_palettes_rgb12_iigs, new_palette_errors = (
