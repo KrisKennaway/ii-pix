@@ -352,13 +352,14 @@ def main():
     inner_iterations = 10
     outer_iterations = 20
 
-    pygame.init()
-    # TODO: for some reason I need to execute this twice - the first time
-    #  the window is created and immediately destroyed
-    _ = pygame.display.set_mode((640, 400))
-    canvas = pygame.display.set_mode((640, 400))
-    canvas.fill((0, 0, 0))
-    pygame.display.flip()
+    if args.show_output:
+        pygame.init()
+        # TODO: for some reason I need to execute this twice - the first time
+        #  the window is created and immediately destroyed
+        _ = pygame.display.set_mode((640, 400))
+        canvas = pygame.display.set_mode((640, 400))
+        canvas.fill((0, 0, 0))
+        pygame.display.flip()
 
     total_image_error = None
     # TODO: reserved_colours should be a flag
