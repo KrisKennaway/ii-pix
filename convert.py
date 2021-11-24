@@ -323,12 +323,16 @@ def main():
         '--verbose', action=argparse.BooleanOptionalAction,
         default=False, help="Show progress during conversion")
     parser.add_argument(
-        '--gamma_correct', type=float, default=2.4,
+        '--gamma-correct', type=float, default=2.4,
         help='Gamma-correct image by this value (default: 2.4)'
     )
     parser.add_argument(
-        '--fixed_colours', type=int, default=0,
+        '--fixed-colours', type=int, default=0,
         help='How many colours to fix as identical across all 16 SHR palettes'
+    )
+    parser.add_argument(
+        '--save-preview', type=bool, default=True,
+        help='Whether to save a .PNG rendering of the output image'
     )
     args = parser.parse_args()
     if args.lookahead < 1:
@@ -424,10 +428,12 @@ def main():
         print("%d unique colours" % unique_colours)
 
         seq += 1
-        # Save Double hi-res image
-        outfile = os.path.join(
-            os.path.splitext(args.output)[0] + "-%d-preview.png" % seq)
-        out_image.save(outfile, "PNG")
+
+        if args.save_preview:
+            # Save Double hi-res image
+            outfile = os.path.join(
+                os.path.splitext(args.output)[0] + "-%d-preview.png" % seq)
+            out_image.save(outfile, "PNG")
         screen.pack()
         # with open(args.output, "wb") as f:
         #     f.write(bytes(screen.aux))
