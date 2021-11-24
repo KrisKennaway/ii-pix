@@ -31,7 +31,7 @@ import screen as screen_py
 class ClusterPalette:
     def __init__(
             self, image: Image, rgb12_iigs_to_cam16ucs, rgb24_to_cam16ucs,
-            reserved_colours=0):
+            fixed_colours=0):
 
         # Source image in 24-bit linear RGB colour space
         self._image_rgb = image
@@ -42,7 +42,7 @@ class ClusterPalette:
         # How many image colours to fix identically across all 16 SHR
         # palettes.  These are taken to be the most prevalent colours from
         # _global_palette.
-        self._reserved_colours = reserved_colours
+        self._fixed_colours = fixed_colours
 
         # We fit a 16-colour palette against the entire image which is used
         # as starting values for fitting the reserved colours in the 16 SHR
@@ -217,9 +217,9 @@ class ClusterPalette:
             pixels_rgb_iigs = dither_pyx.convert_cam16ucs_to_rgb12_iigs(
                 palette_pixels)
             seen_colours = set()
-            for i in range(self._reserved_colours):
+            for i in range(self._fixed_colours):
                 seen_colours.add(tuple(initial_centroids[i, :]))
-            for i in range(self._reserved_colours, 16):
+            for i in range(self._fixed_colours, 16):
                 choice = np.random.randint(0, pixels_rgb_iigs.shape[
                         0])
                 new_colour = pixels_rgb_iigs[choice, :]
@@ -230,7 +230,7 @@ class ClusterPalette:
 
             palettes_rgb12_iigs, palette_error = \
                 dither_pyx.k_means_with_fixed_centroids(
-                    n_clusters=16, n_fixed=self._reserved_colours,
+                    n_clusters=16, n_fixed=self._fixed_colours,
                     samples=palette_pixels,
                     initial_centroids=initial_centroids,
                     max_iterations=1000, tolerance=0.05,
@@ -326,6 +326,10 @@ def main():
         '--gamma_correct', type=float, default=2.4,
         help='Gamma-correct image by this value (default: 2.4)'
     )
+    parser.add_argument(
+        '--fixed_colours', type=int, default=0,
+        help='How many colours to fix as identical across all 16 SHR palettes'
+    )
     args = parser.parse_args()
     if args.lookahead < 1:
         parser.error('--lookahead must be at least 1')
@@ -362,9 +366,8 @@ def main():
         pygame.display.flip()
 
     total_image_error = None
-    # TODO: reserved_colours should be a flag
     cluster_palette = ClusterPalette(
-        rgb, reserved_colours=1,
+        rgb, fixed_colours=args.fixed_colours,
         rgb12_iigs_to_cam16ucs=rgb12_iigs_to_cam16ucs,
         rgb24_to_cam16ucs=rgb24_to_cam16ucs)
 
