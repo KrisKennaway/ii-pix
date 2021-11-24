@@ -73,7 +73,7 @@ class ClusterPalette:
                                          "CAM16UCS").astype(np.float32)
         return colours_cam
 
-    def _init_palette_lines(self, init_random = False):
+    def _init_palette_lines(self, init_random=False):
         palette_lines = defaultdict(list)
 
         if init_random:
@@ -143,7 +143,6 @@ class ClusterPalette:
 
         outer_iterations_since_improvement = 0
         while outer_iterations_since_improvement < max_outer_iterations:
-            print("New iteration")
             inner_iterations_since_improvement = 0
             self._palette_lines = self._init_palette_lines()
 
@@ -221,7 +220,7 @@ class ClusterPalette:
                 seen_colours.add(tuple(initial_centroids[i, :]))
             for i in range(self._fixed_colours, 16):
                 choice = np.random.randint(0, pixels_rgb_iigs.shape[
-                        0])
+                    0])
                 new_colour = pixels_rgb_iigs[choice, :]
                 if tuple(new_colour) in seen_colours:
                     continue
@@ -329,12 +328,16 @@ def main():
     parser.add_argument(
         '--fixed-colours', type=int, default=0,
         help='How many colours to fix as identical across all 16 SHR palettes '
-        '(default: 0)'
+             '(default: 0)'
     )
     parser.add_argument(
         '--save-preview', type=bool, default=True,
         help='Whether to save a .PNG rendering of the output image (default: '
              'True)'
+    )
+    parser.add_argument(
+        '--show-final-score', type=bool, default=False,
+        help='Whether to output the final image quality score (default: False)'
     )
     args = parser.parse_args()
     if args.lookahead < 1:
@@ -382,7 +385,7 @@ def main():
          palettes_rgb12_iigs, palettes_linear_rgb) in cluster_palette.iterate(
         penalty, inner_iterations, outer_iterations):
 
-        if total_image_error is not None:
+        if args.verbose and total_image_error is not None:
             print("Improved quality +%f%% (%f)" % (
                 (1 - new_total_image_error / total_image_error) * 100,
                 new_total_image_error))
@@ -427,7 +430,8 @@ def main():
 
         unique_colours = np.unique(
             palettes_rgb12_iigs.reshape(-1, 3), axis=0).shape[0]
-        print("%d unique colours" % unique_colours)
+        if args.verbose:
+            print("%d unique colours" % unique_colours)
 
         seq += 1
 
@@ -443,6 +447,8 @@ def main():
         with open(args.output, "wb") as f:
             f.write(bytes(screen.memory))
 
+    if args.show_final_score:
+        print("FINAL_SCORE:", total_image_error)
 
 
 if __name__ == "__main__":
