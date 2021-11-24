@@ -352,6 +352,8 @@ def dither_shr(
     cdef float[:, ::1] line_cam = np.zeros((320, 3), dtype=np.float32)
 
     cdef int[::1] line_to_palette = np.zeros(200, dtype=np.int32)
+    cdef double[::1] palette_line_errors = np.zeros(200, dtype=np.float64)
+    cdef PaletteSelection palette_line
 
     best_palette = -1
     total_image_error = 0.0
@@ -360,7 +362,10 @@ def dither_shr(
             line_cam[x, :] = convert_rgb_to_cam16ucs(
                 rgb_to_cam16ucs, working_image[y,x,0], working_image[y,x,1], working_image[y,x,2])
 
-        best_palette = best_palette_for_line(line_cam, palettes_cam, best_palette, penalty)
+        palette_line = best_palette_for_line(line_cam, palettes_cam, best_palette, penalty)
+        best_palette = palette_line.palette_idx
+        palette_line_errors[y] = palette_line.total_error
+
         palette_rgb = palettes_rgb[best_palette, :, :]
         palette_cam = palettes_cam[best_palette, :, :]
         line_to_palette[y] = best_palette
@@ -449,12 +454,16 @@ def dither_shr(
                 #            working_image[y + 2, x + 2, i] + quant_error * (1 / 48),
                 #            0, 1)
 
-    return np.array(output_4bit, dtype=np.uint8), line_to_palette, total_image_error
+    return np.array(output_4bit, dtype=np.uint8), line_to_palette, total_image_error, np.array(palette_line_errors, dtype=np.float64)
 
+
+cdef struct PaletteSelection:
+    int palette_idx
+    double total_error
 
 @cython.boundscheck(False)
 @cython.wraparound(False)
-cdef int best_palette_for_line(float [:, ::1] line_cam, float[:, :, ::1] palettes_cam, int last_palette_idx, float last_penalty) nogil:
+cdef PaletteSelection best_palette_for_line(float [:, ::1] line_cam, float[:, :, ::1] palettes_cam, int last_palette_idx, float last_penalty) nogil:
     cdef int palette_idx, best_palette_idx, palette_entry_idx, pixel_idx
     cdef double best_total_dist, total_dist, best_pixel_dist, pixel_dist
     cdef float[:, ::1] palette_cam
@@ -479,7 +488,11 @@ cdef int best_palette_for_line(float [:, ::1] line_cam, float[:, :, ::1] palette
         if total_dist < best_total_dist:
             best_total_dist = total_dist
             best_palette_idx = palette_idx
-    return best_palette_idx
+
+    cdef PaletteSelection res
+    res.palette_idx = best_palette_idx
+    res.total_error = best_total_dist
+    return res
 
 
 @cython.boundscheck(False)
