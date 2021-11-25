@@ -231,7 +231,7 @@ class ClusterPalette:
                 self._palette_lines[palette_idx], :, :].reshape(-1, 3))
 
             # Fix reserved colours from the global palette.
-            initial_centroids = self._global_palette
+            initial_centroids = np.copy(self._global_palette)
             pixels_rgb_iigs = dither_pyx.convert_cam16ucs_to_rgb12_iigs(
                 palette_pixels)
             seen_colours = set()
@@ -258,8 +258,9 @@ class ClusterPalette:
                 key=lambda kv: kv[1], reverse=True)
             fixed_colours = self._fixed_colours
             for colour, freq in most_frequent_colours:
-                if freq < (palette_pixels.shape[0] *
-                           fixed_colour_fraction_threshold):
+                if (freq < (palette_pixels.shape[0] *
+                            fixed_colour_fraction_threshold)) or (
+                        fixed_colours == 16):
                     break
                 if tuple(colour) not in seen_colours:
                     seen_colours.add(tuple(colour))
@@ -267,11 +268,11 @@ class ClusterPalette:
                     fixed_colours += 1
 
             palette_rgb12_iigs = dither_pyx.k_means_with_fixed_centroids(
-                    n_clusters=16, n_fixed=fixed_colours,
-                    samples=palette_pixels,
-                    initial_centroids=initial_centroids,
-                    max_iterations=1000,
-                    rgb12_iigs_to_cam16ucs=self._rgb12_iigs_to_cam16ucs)
+                n_clusters=16, n_fixed=fixed_colours,
+                samples=palette_pixels,
+                initial_centroids=initial_centroids,
+                max_iterations=1000,
+                rgb12_iigs_to_cam16ucs=self._rgb12_iigs_to_cam16ucs)
             # If the k-means clustering returned fewer than 16 unique colours,
             # fill out the remainder with the most common pixels colours that
             # have not yet been used.
@@ -315,9 +316,12 @@ class ClusterPalette:
     def _fill_short_palette(self, palette_iigs_rgb, most_frequent_colours):
         """Fill out the palette to 16 unique entries."""
 
-        palette_set = set()
+        # We want to maintain order of insertion so that we respect the
+        # ordering of fixed colours in the palette.  Python doesn't have an
+        # orderedset but dicts preserve insertion order.
+        palette_set = {}
         for palette_entry in palette_iigs_rgb:
-            palette_set.add(tuple(palette_entry))
+            palette_set[tuple(palette_entry)] = True
         if len(palette_set) == 16:
             return palette_iigs_rgb
 
@@ -325,17 +329,17 @@ class ClusterPalette:
         for colour, freq in most_frequent_colours:
             if tuple(colour) in palette_set:
                 continue
-            palette_set.add(tuple(colour))
+            palette_set[tuple(colour)] = True
             # print("Added freq %d" % freq)
             if len(palette_set) == 16:
                 break
 
         # We couldn't find any more unique colours, fill out with random ones.
         while len(palette_set) < 16:
-            palette_set.add(
-                tuple(np.random.randint(0, 16, size=3, dtype=np.uint8)))
+            palette_set[
+                tuple(np.random.randint(0, 16, size=3, dtype=np.uint8))] = True
 
-        return np.array(tuple(palette_set), dtype=np.uint8)
+        return np.array(tuple(palette_set.keys()), dtype=np.uint8)
 
     def _reassign_unused_palettes(self, line_to_palette, palettes_iigs_rgb):
         palettes_used = [False] * 16
