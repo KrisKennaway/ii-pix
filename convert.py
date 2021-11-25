@@ -30,14 +30,27 @@ import screen as screen_py
 
 class ClusterPalette:
     def __init__(
-            self, image: Image, rgb12_iigs_to_cam16ucs, rgb24_to_cam16ucs,
+            self, image: np.ndarray, rgb12_iigs_to_cam16ucs, rgb24_to_cam16ucs,
             fixed_colours=0):
 
-        # Source image in 24-bit linear RGB colour space
-        self._image_rgb = image
+        # Conversion matrix from 12-bit //gs RGB colour space to CAM16UCS
+        # colour space
+        self._rgb12_iigs_to_cam16ucs = rgb12_iigs_to_cam16ucs
 
-        # Source image in CAM16UCS colour space
-        self._colours_cam = self._image_colours_cam(image)
+        # Conversion matrix from 24-bit linear RGB colour space to CAM16UCS
+        # colour space
+        self._rgb24_to_cam16ucs = rgb24_to_cam16ucs
+
+        # Preprocessed source image in 24-bit linear RGB colour space.  We
+        # first dither the source image using the full 12-bit //gs RGB colour
+        # palette, ignoring SHR palette limitations (i.e. 4096 independent
+        # colours for each pixel).  This gives much better results for e.g.
+        # solid blocks of colour, which would be dithered inconsistently if
+        # targeting the source image directly.
+        self._image_rgb = self._perfect_dither(image)
+
+        # Preprocessed source image in CAM16UCS colour space
+        self._colours_cam = self._image_colours_cam(self._image_rgb)
 
         # How many image colours to fix identically across all 16 SHR
         # palettes.  These are taken to be the most prevalent colours from
@@ -57,14 +70,6 @@ class ClusterPalette:
 
         # defaultdict(list) mapping palette index to lines using this palette
         self._palette_lines = self._init_palette_lines()
-
-        # Conversion matrix from 12-bit //gs RGB colour space to CAM16UCS
-        # colour space
-        self._rgb12_iigs_to_cam16ucs = rgb12_iigs_to_cam16ucs
-
-        # Conversion matrix from 24-bit linear RGB colour space to CAM16UCS
-        # colour space
-        self._rgb24_to_cam16ucs = rgb24_to_cam16ucs
 
     def _image_colours_cam(self, image: Image):
         colours_rgb = np.asarray(image)  # .reshape((-1, 3))
@@ -112,6 +117,23 @@ class ClusterPalette:
             palette_ranges.append((int(np.round(palette_lower)),
                                    int(np.round(palette_upper))))
         return palette_ranges
+
+    def _perfect_dither(self, source_image: np.ndarray):
+        """Dither a "perfect" image using the full 12-bit //gs RGB colour
+        palette, ignoring restrictions."""
+
+        # Suppress divide by zero warning,
+        # https://github.com/colour-science/colour/issues/900
+        with colour.utilities.suppress_warnings(python_warnings=True):
+            full_palette_linear_rgb = colour.convert(
+                self._rgb12_iigs_to_cam16ucs, "CAM16UCS", "RGB").astype(
+                np.float32)
+
+        total_image_error, image_rgb = dither_pyx.dither_shr_perfect(
+            source_image, self._rgb12_iigs_to_cam16ucs, full_palette_linear_rgb,
+            self._rgb24_to_cam16ucs)
+        # print("Perfect image error:", total_image_error)
+        return image_rgb
 
     def _dither_image(self, palettes_cam, penalty):
         # Suppress divide by zero warning,
@@ -227,9 +249,29 @@ class ClusterPalette:
                 seen_colours.add(tuple(new_colour))
                 initial_centroids[i, :] = new_colour
 
+            # If there are any single colours in our source //gs RGB
+            # pixels that represent more than fixed_colour_fraction_threshold
+            # of the pixels, then fix these colours for the palette instead of
+            # clustering them.  This reduces artifacting on blocks of
+            # colour.
+            fixed_colour_fraction_threshold = 0.1
+            fixed_colours = self._fixed_colours
+            for colour, freq in sorted(list(zip(
+                    *np.unique(dither_pyx.convert_cam16ucs_to_rgb12_iigs(
+                        palette_pixels), return_counts=True, axis=0))),
+                    key=lambda kv: kv[1], reverse=True):
+                if freq < (palette_pixels.shape[0] *
+                           fixed_colour_fraction_threshold):
+                    break
+                # print(colour, freq)
+                if tuple(colour) not in seen_colours:
+                    seen_colours.add(tuple(colour))
+                    initial_centroids[fixed_colours, :] = colour
+                    fixed_colours += 1
+
             palettes_rgb12_iigs, palette_error = \
                 dither_pyx.k_means_with_fixed_centroids(
-                    n_clusters=16, n_fixed=self._fixed_colours,
+                    n_clusters=16, n_fixed=fixed_colours,
                     samples=palette_pixels,
                     initial_centroids=initial_centroids,
                     max_iterations=1000, tolerance=0.05,
@@ -260,6 +302,7 @@ class ClusterPalette:
         palette_freq = {idx: 0 for idx in range(16)}
         for idx, freq in zip(*np.unique(clusters.labels_, return_counts=True)):
             palette_freq[idx] = freq
+
         frequency_order = [
             k for k, v in sorted(
                 list(palette_freq.items()), key=lambda kv: kv[1], reverse=True)]
