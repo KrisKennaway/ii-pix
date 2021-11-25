@@ -266,14 +266,12 @@ class ClusterPalette:
                     initial_centroids[fixed_colours, :] = colour
                     fixed_colours += 1
 
-            palette_rgb12_iigs, palette_error = \
-                dither_pyx.k_means_with_fixed_centroids(
+            palette_rgb12_iigs = dither_pyx.k_means_with_fixed_centroids(
                     n_clusters=16, n_fixed=fixed_colours,
                     samples=palette_pixels,
                     initial_centroids=initial_centroids,
-                    max_iterations=1000, tolerance=0.05,
-                    rgb12_iigs_to_cam16ucs=self._rgb12_iigs_to_cam16ucs
-                )
+                    max_iterations=1000,
+                    rgb12_iigs_to_cam16ucs=self._rgb12_iigs_to_cam16ucs)
             # If the k-means clustering returned fewer than 16 unique colours,
             # fill out the remainder with the most common pixels colours that
             # have not yet been used.
