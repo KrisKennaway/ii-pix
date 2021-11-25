@@ -355,6 +355,9 @@ def dither_shr(
     cdef double[::1] palette_line_errors = np.zeros(200, dtype=np.float64)
     cdef PaletteSelection palette_line
 
+    cdef float decay = 0.5
+    cdef float min_quant_error = 0.0  # 0.02
+
     best_palette = -1
     total_image_error = 0.0
     for y in range(200):
@@ -387,6 +390,8 @@ def dither_shr(
 
             for i in range(3):
                 quant_error = working_image[y, x, i] - best_colour_rgb[i]
+                if abs(quant_error) <= min_quant_error:
+                    quant_error = 0
 
                 # Floyd-Steinberg dither
                 # 0 * 7
@@ -396,15 +401,14 @@ def dither_shr(
                     working_image[y, x + 1, i] = clip(
                         working_image[y, x + 1, i] + quant_error * (7 / 16), 0, 1)
                 if y < 199:
-                    # TODO: parametrize the 0.5x decay factor
                     if x > 0:
                         working_image[y + 1, x - 1, i] = clip(
-                            working_image[y + 1, x - 1, i] + quant_error * (3 / 32), 0, 1)
+                            working_image[y + 1, x - 1, i] + decay * quant_error * (3 / 32), 0, 1)
                     working_image[y + 1, x, i] = clip(
-                        working_image[y + 1, x, i] + quant_error * (5 / 32), 0, 1)
+                        working_image[y + 1, x, i] + decay * quant_error * (5 / 32), 0, 1)
                     if x < 319:
                         working_image[y + 1, x + 1, i] = clip(
-                            working_image[y + 1, x + 1, i] + quant_error * (1 / 32), 0, 1)
+                            working_image[y + 1, x + 1, i] + decay * quant_error * (1 / 32), 0, 1)
 
 #                # 0 0 X 7 5
 #                # 3 5 7 5 3
@@ -418,40 +422,40 @@ def dither_shr(
                 #if y < 199:
                 #    if x > 1:
                 #        working_image[y + 1, x - 2, i] = clip(
-                #            working_image[y + 1, x - 2, i] + quant_error * (3 / 48), 0,
+                #            working_image[y + 1, x - 2, i] + decay * quant_error * (3 / 48), 0,
                 #            1)
                 #    if x > 0:
                 #        working_image[y + 1, x - 1, i] = clip(
-                #            working_image[y + 1, x - 1, i] + quant_error * (5 / 48), 0,
+                #            working_image[y + 1, x - 1, i] + decay * quant_error * (5 / 48), 0,
                 #            1)
                 #    working_image[y + 1, x, i] = clip(
-                #        working_image[y + 1, x, i] + quant_error * (7 / 48), 0, 1)
+                #        working_image[y + 1, x, i] + decay * quant_error * (7 / 48), 0, 1)
                 #    if x < 319:
                 #        working_image[y + 1, x + 1, i] = clip(
-                #            working_image[y + 1, x + 1, i] + quant_error * (5 / 48),
+                #            working_image[y + 1, x + 1, i] + decay * quant_error * (5 / 48),
                 #            0, 1)
                 #    if x < 318:
                 #        working_image[y + 1, x + 2, i] = clip(
-                #            working_image[y + 1, x + 2, i] + quant_error * (3 / 48),
+                #            working_image[y + 1, x + 2, i] + decay * quant_error * (3 / 48),
                 #            0, 1)
                 #if y < 198:
                 #    if x > 1:
                 #        working_image[y + 2, x - 2, i] = clip(
-                #            working_image[y + 2, x - 2, i] + quant_error * (1 / 48), 0,
+                #            working_image[y + 2, x - 2, i] + decay * decay * quant_error * (1 / 48), 0,
                 #            1)
                 #    if x > 0:
                 #        working_image[y + 2, x - 1, i] = clip(
-                #            working_image[y + 2, x - 1, i] + quant_error * (3 / 48), 0,
+                #            working_image[y + 2, x - 1, i] + decay * decay * quant_error * (3 / 48), 0,
                 #            1)
                 #    working_image[y + 2, x, i] = clip(
-                #        working_image[y + 2, x, i] + quant_error * (5 / 48), 0, 1)
+                #        working_image[y + 2, x, i] + decay * decay * quant_error * (5 / 48), 0, 1)
                 #    if x < 319:
                 #        working_image[y + 2, x + 1, i] = clip(
-                #            working_image[y + 2, x + 1, i] + quant_error * (3 / 48),
+                #            working_image[y + 2, x + 1, i] + decay * decay * quant_error * (3 / 48),
                 #            0, 1)
                 #    if x < 318:
                 #        working_image[y + 2, x + 2, i] = clip(
-                #            working_image[y + 2, x + 2, i] + quant_error * (1 / 48),
+                #            working_image[y + 2, x + 2, i] + decay * decay * quant_error * (1 / 48),
                 #            0, 1)
 
     return np.array(output_4bit, dtype=np.uint8), line_to_palette, total_image_error, np.array(palette_line_errors, dtype=np.float64)
