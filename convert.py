@@ -179,9 +179,9 @@ class ClusterPalette:
                  new_total_image_error) = self._dither_image(
                     new_palettes_cam, penalty)
 
-                # TODO: check for duplicate palettes and unused colours
-                #  within a palette
-                self._reassign_unused_palettes(line_to_palette)
+                # TODO: check for unused colours within a palette
+                self._reassign_unused_palettes(
+                    line_to_palette, new_palettes_rgb12_iigs)
 
                 if new_total_image_error >= total_image_error:
                     inner_iterations_since_improvement += 1
@@ -230,46 +230,43 @@ class ClusterPalette:
                 self._colours_cam[
                 self._palette_lines[palette_idx], :, :].reshape(-1, 3))
 
-            # Fix reserved colours from the global palette and pick unique
-            # random colours from the sample points for the remaining initial
-            # centroids.  This tends to increase the number of colours in the
-            # resulting image, and improves quality.
+            # Fix reserved colours from the global palette.
             initial_centroids = self._global_palette
             pixels_rgb_iigs = dither_pyx.convert_cam16ucs_to_rgb12_iigs(
                 palette_pixels)
             seen_colours = set()
             for i in range(self._fixed_colours):
                 seen_colours.add(tuple(initial_centroids[i, :]))
+
+            # Pick unique random colours from the sample points for the
+            # remaining initial centroids.
             for i in range(self._fixed_colours, 16):
-                choice = np.random.randint(0, pixels_rgb_iigs.shape[
-                    0])
+                choice = np.random.randint(0, pixels_rgb_iigs.shape[0])
                 new_colour = pixels_rgb_iigs[choice, :]
                 if tuple(new_colour) in seen_colours:
                     continue
                 seen_colours.add(tuple(new_colour))
                 initial_centroids[i, :] = new_colour
 
-            # If there are any single colours in our source //gs RGB
-            # pixels that represent more than fixed_colour_fraction_threshold
-            # of the pixels, then fix these colours for the palette instead of
-            # clustering them.  This reduces artifacting on blocks of
-            # colour.
+            # If there are any single colours in our source //gs RGB pixels that
+            # represent more than fixed_colour_fraction_threshold of the total,
+            # then fix these colours for the palette instead of clustering
+            # them.  This reduces artifacting on blocks of colour.
             fixed_colour_fraction_threshold = 0.1
+            most_frequent_colours = sorted(list(zip(
+                *np.unique(pixels_rgb_iigs, return_counts=True, axis=0))),
+                key=lambda kv: kv[1], reverse=True)
             fixed_colours = self._fixed_colours
-            for colour, freq in sorted(list(zip(
-                    *np.unique(dither_pyx.convert_cam16ucs_to_rgb12_iigs(
-                        palette_pixels), return_counts=True, axis=0))),
-                    key=lambda kv: kv[1], reverse=True):
+            for colour, freq in most_frequent_colours:
                 if freq < (palette_pixels.shape[0] *
                            fixed_colour_fraction_threshold):
                     break
-                # print(colour, freq)
                 if tuple(colour) not in seen_colours:
                     seen_colours.add(tuple(colour))
                     initial_centroids[fixed_colours, :] = colour
                     fixed_colours += 1
 
-            palettes_rgb12_iigs, palette_error = \
+            palette_rgb12_iigs, palette_error = \
                 dither_pyx.k_means_with_fixed_centroids(
                     n_clusters=16, n_fixed=fixed_colours,
                     samples=palette_pixels,
@@ -277,14 +274,19 @@ class ClusterPalette:
                     max_iterations=1000, tolerance=0.05,
                     rgb12_iigs_to_cam16ucs=self._rgb12_iigs_to_cam16ucs
                 )
+            # If the k-means clustering returned fewer than 16 unique colours,
+            # fill out the remainder with the most common pixels colours that
+            # have not yet been used.
+            palette_rgb12_iigs = self._fill_short_palette(
+                palette_rgb12_iigs, most_frequent_colours)
 
             for i in range(16):
                 new_palettes_cam[palette_idx, i, :] = (
                     np.array(dither_pyx.convert_rgb12_iigs_to_cam(
-                        self._rgb12_iigs_to_cam16ucs, palettes_rgb12_iigs[
+                        self._rgb12_iigs_to_cam16ucs, palette_rgb12_iigs[
                             i]), dtype=np.float32))
 
-            new_palettes_rgb12_iigs[palette_idx, :, :] = palettes_rgb12_iigs
+            new_palettes_rgb12_iigs[palette_idx, :, :] = palette_rgb12_iigs
 
         self._palettes_accepted = False
         return new_palettes_cam, new_palettes_rgb12_iigs
@@ -312,12 +314,47 @@ class ClusterPalette:
                 clusters.cluster_centers_[frequency_order].astype(
                     np.float32)))
 
-    def _reassign_unused_palettes(self, new_line_to_palette):
+    def _fill_short_palette(self, palette_iigs_rgb, most_frequent_colours):
+        """Fill out the palette to 16 unique entries."""
+
+        palette_set = set()
+        for palette_entry in palette_iigs_rgb:
+            palette_set.add(tuple(palette_entry))
+        if len(palette_set) == 16:
+            return palette_iigs_rgb
+
+        # Add most frequent image colours that are not yet in the palette
+        for colour, freq in most_frequent_colours:
+            if tuple(colour) in palette_set:
+                continue
+            palette_set.add(tuple(colour))
+            # print("Added freq %d" % freq)
+            if len(palette_set) == 16:
+                break
+
+        # We couldn't find any more unique colours, fill out with random ones.
+        while len(palette_set) < 16:
+            palette_set.add(
+                tuple(np.random.randint(0, 16, size=3, dtype=np.uint8)))
+
+        return np.array(tuple(palette_set), dtype=np.uint8)
+
+    def _reassign_unused_palettes(self, line_to_palette, palettes_iigs_rgb):
         palettes_used = [False] * 16
-        for palette in new_line_to_palette:
+        for palette in line_to_palette:
             palettes_used[palette] = True
         best_palette_lines = [v for k, v in sorted(list(zip(
             self._palette_line_errors, range(200))))]
+
+        all_palettes = set()
+        for palette_idx, palette_iigs_rgb in enumerate(palettes_iigs_rgb):
+            palette_set = set()
+            for palette_entry in palette_iigs_rgb:
+                palette_set.add(tuple(palette_entry))
+            palette_set = frozenset(palette_set)
+            if palette_set in all_palettes:
+                print("Duplicate palette", palette_idx, palette_set)
+                palettes_used[palette_idx] = False
 
         for palette_idx, palette_used in enumerate(palettes_used):
             if palette_used:
