@@ -41,7 +41,7 @@ def add_common_args(parser):
 
 def main():
     parser = argparse.ArgumentParser()
-    subparsers = parser.add_subparsers()
+    subparsers = parser.add_subparsers(required=True)
 
     dhr_parser = subparsers.add_parser("dhr")
     add_common_args(dhr_parser)
