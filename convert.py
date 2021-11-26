@@ -16,7 +16,8 @@ from os import environ
 environ['PYGAME_HIDE_SUPPORT_PROMPT'] = '1'
 import pygame
 
-import dither as dither_pyx
+import dither_dhr as dither_dhr_pyx
+import dither_shr as dither_shr_pyx
 import dither_pattern
 import image as image_py
 import palette as palette_py
@@ -129,7 +130,7 @@ class ClusterPalette:
                 self._rgb12_iigs_to_cam16ucs, "CAM16UCS", "RGB").astype(
                 np.float32)
 
-        total_image_error, image_rgb = dither_pyx.dither_shr_perfect(
+        total_image_error, image_rgb = dither_shr_pyx.dither_shr_perfect(
             source_image, self._rgb12_iigs_to_cam16ucs, full_palette_linear_rgb,
             self._rgb24_to_cam16ucs)
         # print("Perfect image error:", total_image_error)
@@ -143,7 +144,7 @@ class ClusterPalette:
                 palettes_cam, "CAM16UCS", "RGB").astype(np.float32)
 
         output_4bit, line_to_palette, total_image_error, palette_line_errors = \
-            dither_pyx.dither_shr(
+            dither_shr_pyx.dither_shr(
                 self._image_rgb, palettes_cam, palettes_linear_rgb,
                 self._rgb24_to_cam16ucs)
 
@@ -230,7 +231,7 @@ class ClusterPalette:
 
             # Fix reserved colours from the global palette.
             initial_centroids = np.copy(self._global_palette)
-            pixels_rgb_iigs = dither_pyx.convert_cam16ucs_to_rgb12_iigs(
+            pixels_rgb_iigs = dither_shr_pyx.convert_cam16ucs_to_rgb12_iigs(
                 palette_pixels)
             seen_colours = set()
             for i in range(self._fixed_colours):
@@ -265,7 +266,7 @@ class ClusterPalette:
                     initial_centroids[fixed_colours, :] = colour
                     fixed_colours += 1
 
-            palette_rgb12_iigs = dither_pyx.k_means_with_fixed_centroids(
+            palette_rgb12_iigs = dither_shr_pyx.k_means_with_fixed_centroids(
                 n_clusters=16, n_fixed=fixed_colours,
                 samples=palette_pixels,
                 initial_centroids=initial_centroids,
@@ -279,7 +280,7 @@ class ClusterPalette:
 
             for i in range(16):
                 new_palettes_cam[palette_idx, i, :] = (
-                    np.array(dither_pyx.convert_rgb12_iigs_to_cam(
+                    np.array(dither_shr_pyx.convert_rgb12_iigs_to_cam(
                         self._rgb12_iigs_to_cam16ucs, palette_rgb12_iigs[
                             i]), dtype=np.float32))
 
@@ -307,7 +308,7 @@ class ClusterPalette:
                 list(palette_freq.items()), key=lambda kv: kv[1], reverse=True)]
 
         self._global_palette = (
-            dither_pyx.convert_cam16ucs_to_rgb12_iigs(
+            dither_shr_pyx.convert_cam16ucs_to_rgb12_iigs(
                 clusters.cluster_centers_[frequency_order].astype(
                     np.float32)))
 
@@ -486,7 +487,7 @@ def main():
         output_srgb = (image_py.linear_to_srgb(output_rgb)).astype(np.uint8)
 
         # dither = dither_pattern.PATTERNS[args.dither]()
-        # bitmap = dither_pyx.dither_image(
+        # bitmap = dither_dhr_pyx.dither_image(
         #     screen, rgb, dither, args.lookahead, args.verbose, rgb24_to_cam16ucs)
 
         # Show output image by rendering in target palette
