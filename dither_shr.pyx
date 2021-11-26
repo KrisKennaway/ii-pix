@@ -1,5 +1,7 @@
 # cython: infer_types=True
 # cython: profile=False
+# cython: boundscheck=False
+# cython: wraparound=False
 
 cimport cython
 import numpy as np
@@ -9,21 +11,15 @@ cdef float clip(float a, float min_value, float max_value) nogil:
     return min(max(a, min_value), max_value)
 
 
-@cython.boundscheck(False)
-@cython.wraparound(False)
 cdef inline float[::1] convert_rgb_to_cam16ucs(float[:, ::1] rgb_to_cam16ucs, float r, float g, float b) nogil:
     cdef unsigned int rgb_24bit = (<unsigned int>(r*255) << 16) + (<unsigned int>(g*255) << 8) + <unsigned int>(b*255)
     return rgb_to_cam16ucs[rgb_24bit]
 
 
-@cython.boundscheck(False)
-@cython.wraparound(False)
 cdef inline double colour_distance_squared(float[::1] colour1, float[::1] colour2) nogil:
     return (colour1[0] - colour2[0]) ** 2 + (colour1[1] - colour2[1]) ** 2 + (colour1[2] - colour2[2]) ** 2
 
 
-@cython.boundscheck(False)
-@cython.wraparound(False)
 def dither_shr_perfect(
         float[:, :, ::1] input_rgb, float[:, ::1] full_palette_cam, float[:, ::1] full_palette_rgb,
         float[:,::1] rgb_to_cam16ucs):
@@ -134,8 +130,6 @@ def dither_shr_perfect(
     return total_image_error, working_image
 
 
-@cython.boundscheck(False)
-@cython.wraparound(False)
 def dither_shr(
         float[:, :, ::1] input_rgb, float[:, :, ::1] palettes_cam, float[:, :, ::1] palettes_rgb,
         float[:,::1] rgb_to_cam16ucs):
@@ -264,8 +258,6 @@ cdef struct PaletteSelection:
     double total_error
 
 
-@cython.boundscheck(False)
-@cython.wraparound(False)
 cdef PaletteSelection best_palette_for_line(float [:, ::1] line_cam, float[:, :, ::1] palettes_cam, int last_palette_idx) nogil:
     cdef int palette_idx, best_palette_idx, palette_entry_idx, pixel_idx
     cdef double best_total_dist, total_dist, best_pixel_dist, pixel_dist
@@ -296,8 +288,6 @@ cdef PaletteSelection best_palette_for_line(float [:, ::1] line_cam, float[:, :,
     return res
 
 
-@cython.boundscheck(False)
-@cython.wraparound(False)
 cdef float[::1] _convert_rgb12_iigs_to_cam(float [:, ::1] rgb12_iigs_to_cam16ucs, (unsigned char)[::1] point_rgb12) nogil:
     cdef int rgb12 = (point_rgb12[0] << 8) | (point_rgb12[1] << 4) | point_rgb12[2]
     return rgb12_iigs_to_cam16ucs[rgb12]
@@ -308,8 +298,6 @@ def convert_rgb12_iigs_to_cam(float [:, ::1] rgb12_iigs_to_cam16ucs, (unsigned c
 
 import colour
 
-@cython.boundscheck(False)
-@cython.wraparound(False)
 @cython.cdivision(True)
 cdef float[:, ::1] linear_to_srgb_array(float[:, ::1] a, float gamma=2.4):
     cdef int i, j
@@ -322,8 +310,6 @@ cdef float[:, ::1] linear_to_srgb_array(float[:, ::1] a, float gamma=2.4):
                 res[i, j] = 1.055 * a[i, j] ** (1.0 / gamma) - 0.055
     return res
 
-@cython.boundscheck(False)
-@cython.wraparound(False)
 cdef (unsigned char)[:, ::1] _convert_cam16ucs_to_rgb12_iigs(float[:, ::1] point_cam):
     cdef float[:, ::1] rgb
     cdef (float)[:, ::1] rgb12_iigs
@@ -348,8 +334,6 @@ def convert_cam16ucs_to_rgb12_iigs(float[:, ::1] point_cam):
     return _convert_cam16ucs_to_rgb12_iigs(point_cam)
 
 
-@cython.boundscheck(False)
-@cython.wraparound(False)
 @cython.cdivision(True)
 def k_means_with_fixed_centroids(
     int n_clusters, int n_fixed, float[:, ::1] samples, (unsigned char)[:, ::1] initial_centroids, int max_iterations,

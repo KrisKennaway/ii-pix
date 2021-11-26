@@ -1,5 +1,7 @@
 # cython: infer_types=True
 # cython: profile=False
+# cython: boundscheck=False
+# cython: wraparound=False
 
 cimport cython
 import numpy as np
@@ -90,8 +92,6 @@ cdef inline unsigned char shift_pixel_window(
 #
 # Returns: index from 0 .. 2**lookahead into options_nbit representing best available choice for position (x,y)
 #
-@cython.boundscheck(False)
-@cython.wraparound(False)
 cdef int dither_lookahead(Dither* dither, float[:, :, ::1] palette_cam16, float[:, :, ::1] palette_rgb,
         float[:, :, ::1] image_rgb, int x, int y, int lookahead, unsigned char last_pixels,
         int x_res, float[:,::1] rgb_to_cam16ucs, unsigned char palette_depth) nogil:
@@ -157,21 +157,15 @@ cdef int dither_lookahead(Dither* dither, float[:, :, ::1] palette_cam16, float[
     return best
 
 
-@cython.boundscheck(False)
-@cython.wraparound(False)
 cdef inline float[::1] convert_rgb_to_cam16ucs(float[:, ::1] rgb_to_cam16ucs, float r, float g, float b) nogil:
     cdef unsigned int rgb_24bit = (<unsigned int>(r*255) << 16) + (<unsigned int>(g*255) << 8) + <unsigned int>(b*255)
     return rgb_to_cam16ucs[rgb_24bit]
 
 
-@cython.boundscheck(False)
-@cython.wraparound(False)
 cdef inline float fabs(float value) nogil:
     return -value if value < 0 else value
 
 
-@cython.boundscheck(False)
-@cython.wraparound(False)
 cdef inline double colour_distance_squared(float[::1] colour1, float[::1] colour2) nogil:
     return (colour1[0] - colour2[0]) ** 2 + (colour1[1] - colour2[1]) ** 2 + (colour1[2] - colour2[2]) ** 2
 
@@ -210,8 +204,6 @@ cdef void apply_one_line(Dither* dither, int xl, int xr, int x, float[] image, i
 #     image: RGB pixel data, to be mutated
 #     quant_error: RGB quantization error to be diffused
 #
-@cython.boundscheck(False)
-@cython.wraparound(False)
 cdef void apply(Dither* dither, int x_res, int y_res, int x, int y, float[:,:,::1] image, float[] quant_error) nogil:
 
     cdef int i, j, k
@@ -229,8 +221,6 @@ cdef void apply(Dither* dither, int x_res, int y_res, int x, int y, float[:,:,::
                 image[i,j,k] = clip(image[i,j,k] + error_fraction * quant_error[k], 0, 1)
 
 
-@cython.boundscheck(False)
-@cython.wraparound(False)
 cdef image_nbit_to_bitmap(
     (unsigned char)[:, ::1] image_nbit, unsigned int x_res, unsigned int y_res, unsigned char palette_depth):
     cdef unsigned int x, y
@@ -253,8 +243,6 @@ cdef image_nbit_to_bitmap(
 #
 # Returns: tuple of n-bit output image array and RGB output image array
 #
-@cython.boundscheck(False)
-@cython.wraparound(False)
 def dither_image(
         screen, float[:, :, ::1] image_rgb, dither, int lookahead, unsigned char verbose, float[:,::1] rgb_to_cam16ucs):
     cdef int y, x
