@@ -163,6 +163,7 @@ cdef inline float[::1] convert_rgb_to_cam16ucs(float[:, ::1] rgb_to_cam16ucs, fl
     cdef unsigned int rgb_24bit = (<unsigned int>(r*255) << 16) + (<unsigned int>(g*255) << 8) + <unsigned int>(b*255)
     return rgb_to_cam16ucs[rgb_24bit]
 
+
 @cython.boundscheck(False)
 @cython.wraparound(False)
 cdef inline float fabs(float value) nogil:
@@ -173,12 +174,6 @@ cdef inline float fabs(float value) nogil:
 @cython.wraparound(False)
 cdef inline double colour_distance_squared(float[::1] colour1, float[::1] colour2) nogil:
     return (colour1[0] - colour2[0]) ** 2 + (colour1[1] - colour2[1]) ** 2 + (colour1[2] - colour2[2]) ** 2
-
-
-@cython.boundscheck(False)
-@cython.wraparound(False)
-cdef inline float colour_distance(float[::1] colour1, float[::1] colour2) nogil:
-    return fabs(colour1[0] - colour2[0]) + fabs(colour1[1] - colour2[1]) + fabs(colour1[2] - colour2[2])
 
 
 # Perform error diffusion to a single image row.
@@ -353,7 +348,6 @@ def dither_shr_perfect(
     cdef int palette_size = full_palette_rgb.shape[0]
 
     cdef float decay = 0.5
-    cdef float min_quant_error = 0.0  # 0.02
     cdef int floyd_steinberg = 1
 
     total_image_error = 0.0
@@ -373,13 +367,11 @@ def dither_shr_perfect(
                 if distance < best_distance:
                     best_distance = distance
                     best_colour_idx = idx
-            best_colour_rgb = full_palette_rgb[best_colour_idx]
+            best_colour_rgb = full_palette_rgb[best_colour_idx, :]
             total_image_error += best_distance
 
             for i in range(3):
                 quant_error = working_image[y, x, i] - best_colour_rgb[i]
-                if abs(quant_error) <= min_quant_error:
-                    quant_error = 0
 
                 working_image[y, x, i] = best_colour_rgb[i]
                 if floyd_steinberg:
@@ -455,7 +447,7 @@ def dither_shr_perfect(
 @cython.wraparound(False)
 def dither_shr(
         float[:, :, ::1] input_rgb, float[:, :, ::1] palettes_cam, float[:, :, ::1] palettes_rgb,
-        float[:,::1] rgb_to_cam16ucs, float penalty):
+        float[:,::1] rgb_to_cam16ucs):
     cdef int y, x, idx, best_colour_idx, best_palette, i
     cdef double best_distance, distance, total_image_error
     cdef float[::1] best_colour_rgb, pixel_cam
@@ -471,7 +463,6 @@ def dither_shr(
     cdef PaletteSelection palette_line
 
     cdef float decay = 0.5
-    cdef float min_quant_error = 0.0  # 0.02
     cdef int floyd_steinberg = 1
 
     best_palette = -1
@@ -481,7 +472,7 @@ def dither_shr(
             line_cam[x, :] = convert_rgb_to_cam16ucs(
                 rgb_to_cam16ucs, working_image[y,x,0], working_image[y,x,1], working_image[y,x,2])
 
-        palette_line = best_palette_for_line(line_cam, palettes_cam, best_palette, penalty)
+        palette_line = best_palette_for_line(line_cam, palettes_cam, best_palette)
         best_palette = palette_line.palette_idx
         palette_line_errors[y] = palette_line.total_error
 
@@ -506,8 +497,6 @@ def dither_shr(
 
             for i in range(3):
                 quant_error = working_image[y, x, i] - best_colour_rgb[i]
-                if abs(quant_error) <= min_quant_error:
-                    quant_error = 0
 
                 working_image[y, x, i] = best_colour_rgb[i]
                 if floyd_steinberg:
@@ -586,7 +575,7 @@ cdef struct PaletteSelection:
 
 @cython.boundscheck(False)
 @cython.wraparound(False)
-cdef PaletteSelection best_palette_for_line(float [:, ::1] line_cam, float[:, :, ::1] palettes_cam, int last_palette_idx, float last_penalty) nogil:
+cdef PaletteSelection best_palette_for_line(float [:, ::1] line_cam, float[:, :, ::1] palettes_cam, int last_palette_idx) nogil:
     cdef int palette_idx, best_palette_idx, palette_entry_idx, pixel_idx
     cdef double best_total_dist, total_dist, best_pixel_dist, pixel_dist
     cdef float[:, ::1] palette_cam
@@ -594,17 +583,15 @@ cdef PaletteSelection best_palette_for_line(float [:, ::1] line_cam, float[:, :,
 
     best_total_dist = 1e9
     best_palette_idx = -1
-    cdef float penalty
     cdef int line_size = line_cam.shape[0]
     for palette_idx in range(16):
         palette_cam = palettes_cam[palette_idx, :, :]
-        penalty = last_penalty if palette_idx == last_palette_idx else 1.0
         total_dist = 0
         for pixel_idx in range(line_size):
             pixel_cam = line_cam[pixel_idx]
             best_pixel_dist = 1e9
             for palette_entry_idx in range(16):
-                pixel_dist = colour_distance_squared(pixel_cam, palette_cam[palette_entry_idx, :]) * penalty
+                pixel_dist = colour_distance_squared(pixel_cam, palette_cam[palette_entry_idx, :])
                 if pixel_dist < best_pixel_dist:
                     best_pixel_dist = pixel_dist
             total_dist += best_pixel_dist
@@ -650,13 +637,12 @@ cdef (unsigned char)[:, ::1] _convert_cam16ucs_to_rgb12_iigs(float[:, ::1] point
     cdef float[:, ::1] rgb
     cdef (float)[:, ::1] rgb12_iigs
 
-    # Convert CAM16UCS input to RGB
-    # TODO: this dynamically constructs a path on the graph of colour conversions every time, which is
-    #  presumably not very efficient.  However, colour.convert doesn't provide a way to cache the composed conversion
-    #  function so we'd have to build it ourselves (https://github.com/colour-science/colour/issues/905)
+    # Convert CAM16UCS input to RGB.  Even though this dynamically constructs a path on the graph of colour conversions
+    # every time, in practise this seems to have a negligible overhead compared to the actual conversion functions.
     with colour.utilities.suppress_warnings(python_warnings=True):
         rgb = colour.convert(point_cam, "CAM16UCS", "RGB").astype(np.float32)
 
+    # TODO: precompute this conversion matrix since it's static.  This accounts for about 10% of the CPU time here.
     rgb12_iigs = np.clip(
         # Convert to Rec.601 R'G'B'
         colour.YCbCr_to_RGB(
@@ -675,7 +661,8 @@ def convert_cam16ucs_to_rgb12_iigs(float[:, ::1] point_cam):
 @cython.wraparound(False)
 @cython.cdivision(True)
 def k_means_with_fixed_centroids(
-    int n_clusters, int n_fixed, float[:, ::1] samples, (unsigned char)[:, ::1] initial_centroids, int max_iterations, float [:, ::1] rgb12_iigs_to_cam16ucs):
+    int n_clusters, int n_fixed, float[:, ::1] samples, (unsigned char)[:, ::1] initial_centroids, int max_iterations,
+    float [:, ::1] rgb12_iigs_to_cam16ucs):
 
     cdef double error, best_error, total_error, last_total_error
     cdef int centroid_idx, closest_centroid_idx, i, point_idx

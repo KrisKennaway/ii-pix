@@ -135,7 +135,7 @@ class ClusterPalette:
         # print("Perfect image error:", total_image_error)
         return image_rgb
 
-    def _dither_image(self, palettes_cam, penalty):
+    def _dither_image(self, palettes_cam):
         # Suppress divide by zero warning,
         # https://github.com/colour-science/colour/issues/900
         with colour.utilities.suppress_warnings(python_warnings=True):
@@ -145,7 +145,7 @@ class ClusterPalette:
         output_4bit, line_to_palette, total_image_error, palette_line_errors = \
             dither_pyx.dither_shr(
                 self._image_rgb, palettes_cam, palettes_linear_rgb,
-                self._rgb24_to_cam16ucs, float(penalty))
+                self._rgb24_to_cam16ucs)
 
         # Update map of palettes to image lines for which the palette was the
         # best match
@@ -159,7 +159,7 @@ class ClusterPalette:
         return (output_4bit, line_to_palette, palettes_linear_rgb,
                 total_image_error)
 
-    def iterate(self, penalty: float, max_inner_iterations: int,
+    def iterate(self, max_inner_iterations: int,
                 max_outer_iterations: int):
         total_image_error = 1e9
 
@@ -176,10 +176,8 @@ class ClusterPalette:
                 # Recompute image with proposed palettes and check whether it
                 # has lower total image error than our previous best.
                 (output_4bit, line_to_palette, palettes_linear_rgb,
-                 new_total_image_error) = self._dither_image(
-                    new_palettes_cam, penalty)
+                 new_total_image_error) = self._dither_image(new_palettes_cam)
 
-                # TODO: check for unused colours within a palette
                 self._reassign_unused_palettes(
                     line_to_palette, new_palettes_rgb12_iigs)
 
@@ -444,7 +442,6 @@ def main():
                         gamma=args.gamma_correct)).astype(np.float32) / 255
 
     # TODO: flags
-    penalty = 1  # 1e18  # TODO: is this needed any more?
     inner_iterations = 10
     outer_iterations = 20
 
@@ -466,7 +463,7 @@ def main():
     seq = 0
     for (new_total_image_error, output_4bit, line_to_palette,
          palettes_rgb12_iigs, palettes_linear_rgb) in cluster_palette.iterate(
-        penalty, inner_iterations, outer_iterations):
+        inner_iterations, outer_iterations):
 
         if args.verbose and total_image_error is not None:
             print("Improved quality +%f%% (%f)" % (
