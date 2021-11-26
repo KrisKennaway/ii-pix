@@ -583,6 +583,7 @@ cdef struct PaletteSelection:
     int palette_idx
     double total_error
 
+
 @cython.boundscheck(False)
 @cython.wraparound(False)
 cdef PaletteSelection best_palette_for_line(float [:, ::1] line_cam, float[:, :, ::1] palettes_cam, int last_palette_idx, float last_penalty) nogil:
@@ -619,7 +620,7 @@ cdef PaletteSelection best_palette_for_line(float [:, ::1] line_cam, float[:, :,
 
 @cython.boundscheck(False)
 @cython.wraparound(False)
-cdef float[::1] _convert_rgb12_iigs_to_cam(float [:, ::1] rgb12_iigs_to_cam16ucs, (unsigned char)[::1] point_rgb12):
+cdef float[::1] _convert_rgb12_iigs_to_cam(float [:, ::1] rgb12_iigs_to_cam16ucs, (unsigned char)[::1] point_rgb12) nogil:
     cdef int rgb12 = (point_rgb12[0] << 8) | (point_rgb12[1] << 4) | point_rgb12[2]
     return rgb12_iigs_to_cam16ucs[rgb12]
 
@@ -631,6 +632,7 @@ import colour
 
 @cython.boundscheck(False)
 @cython.wraparound(False)
+@cython.cdivision(True)
 cdef float[:, ::1] linear_to_srgb_array(float[:, ::1] a, float gamma=2.4):
     cdef int i, j
     cdef float[:, ::1] res = np.empty_like(a, dtype=np.float32)
@@ -671,6 +673,7 @@ def convert_cam16ucs_to_rgb12_iigs(float[:, ::1] point_cam):
 
 @cython.boundscheck(False)
 @cython.wraparound(False)
+@cython.cdivision(True)
 def k_means_with_fixed_centroids(
     int n_clusters, int n_fixed, float[:, ::1] samples, (unsigned char)[:, ::1] initial_centroids, int max_iterations, float [:, ::1] rgb12_iigs_to_cam16ucs):
 
