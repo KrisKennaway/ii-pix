@@ -7,6 +7,8 @@ cimport cython
 import numpy as np
 from libc.stdlib cimport malloc, free
 
+cimport common
+
 
 # TODO: use a cdef class
 # C representation of dither_pattern.DitherPattern data, for efficient access.
@@ -17,10 +19,6 @@ cdef struct Dither:
     int y_shape
     int x_origin
     int y_origin
-
-
-cdef float clip(float a, float min_value, float max_value) nogil:
-    return min(max(a, min_value), max_value)
 
 
 # Compute left-hand bounding box for dithering at horizontal position x.
@@ -140,10 +138,10 @@ cdef int dither_lookahead(Dither* dither, float[:, :, ::1] palette_cam16, float[
                 quant_error[j] = lah_image_rgb[i * lah_shape2 + j] - palette_rgb[next_pixels, phase, j]
             apply_one_line(dither, xl, xr, i, lah_image_rgb, lah_shape2, quant_error)
 
-            lah_cam16ucs = convert_rgb_to_cam16ucs(
+            lah_cam16ucs = common.convert_rgb_to_cam16ucs(
                 rgb_to_cam16ucs, lah_image_rgb[i*lah_shape2], lah_image_rgb[i*lah_shape2+1],
                 lah_image_rgb[i*lah_shape2+2])
-            total_error += colour_distance_squared(lah_cam16ucs, palette_cam16[next_pixels, phase])
+            total_error += common.colour_distance_squared(lah_cam16ucs, palette_cam16[next_pixels, phase])
 
             if total_error >= best_error:
                 # No need to continue
@@ -155,19 +153,6 @@ cdef int dither_lookahead(Dither* dither, float[:, :, ::1] palette_cam16, float[
 
     free(lah_image_rgb)
     return best
-
-
-cdef inline float[::1] convert_rgb_to_cam16ucs(float[:, ::1] rgb_to_cam16ucs, float r, float g, float b) nogil:
-    cdef unsigned int rgb_24bit = (<unsigned int>(r*255) << 16) + (<unsigned int>(g*255) << 8) + <unsigned int>(b*255)
-    return rgb_to_cam16ucs[rgb_24bit]
-
-
-cdef inline float fabs(float value) nogil:
-    return -value if value < 0 else value
-
-
-cdef inline double colour_distance_squared(float[::1] colour1, float[::1] colour2) nogil:
-    return (colour1[0] - colour2[0]) ** 2 + (colour1[1] - colour2[1]) ** 2 + (colour1[2] - colour2[2]) ** 2
 
 
 # Perform error diffusion to a single image row.
@@ -190,7 +175,7 @@ cdef void apply_one_line(Dither* dither, int xl, int xr, int x, float[] image, i
     for i in range(xl, xr):
         error_fraction = dither.pattern[i - x + dither.x_origin]
         for j in range(3):
-            image[i * image_shape1 + j] = clip(image[i * image_shape1 + j] + error_fraction * quant_error[j], 0, 1)
+            image[i * image_shape1 + j] = common.clip(image[i * image_shape1 + j] + error_fraction * quant_error[j], 0, 1)
 
 
 # Perform error diffusion across multiple image rows.
@@ -218,7 +203,7 @@ cdef void apply(Dither* dither, int x_res, int y_res, int x, int y, float[:,:,::
         for j in range(xl, xr):
             error_fraction = dither.pattern[(i - y) * dither.x_shape + j - x + dither.x_origin]
             for k in range(3):
-                image[i,j,k] = clip(image[i,j,k] + error_fraction * quant_error[k], 0, 1)
+                image[i,j,k] = common.clip(image[i,j,k] + error_fraction * quant_error[k], 0, 1)
 
 
 cdef image_nbit_to_bitmap(
