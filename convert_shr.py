@@ -358,8 +358,11 @@ class ClusterPalette:
 def convert(screen, rgb: np.ndarray, args):
     # Conversion matrix from RGB to CAM16UCS colour values.  Indexed by
     # 24-bit RGB value
-    rgb24_to_cam16ucs = np.load("data/rgb24_to_cam16ucs.npy")
-    rgb12_iigs_to_cam16ucs = np.load("data/rgb12_iigs_to_cam16ucs.npy")
+    base_dir = os.path.dirname(__file__)
+    rgb24_to_cam16ucs = np.load(
+        os.path.join(base_dir, "data/rgb24_to_cam16ucs.npy"))
+    rgb12_iigs_to_cam16ucs = np.load(
+        os.path.join(base_dir, "data/rgb12_iigs_to_cam16ucs.npy"))
 
     # TODO: flags
     inner_iterations = 10

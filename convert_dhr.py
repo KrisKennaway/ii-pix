@@ -13,7 +13,9 @@ import image as image_py
 def convert(screen, rgb: np.ndarray, args):
     # Conversion matrix from RGB to CAM16UCS colour values.  Indexed by
     # 24-bit RGB value
-    rgb24_to_cam16ucs = np.load("data/rgb24_to_cam16ucs.npy")
+    base_dir = os.path.dirname(__file__)
+    rgb24_to_cam16ucs = np.load(
+        os.path.join(base_dir, "data/rgb24_to_cam16ucs.npy"))
 
     dither = dither_pattern.PATTERNS[args.dither]()
     bitmap = dither_dhr_pyx.dither_image(
