@@ -10,10 +10,13 @@ import image as image_py
 import palette as palette_py
 import screen as screen_py
 
-
 # TODO:
-# - support LR/DLR
-# - support HGR
+#  - support additional graphics modes (easiest --> hardest):
+#    - LR/DLR
+#    - SHR 3200
+#    - SHR 640
+#    - HGR
+
 
 def add_common_args(parser):
     parser.add_argument("input", type=str, help="Input image file to process.")
