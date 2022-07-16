@@ -10,7 +10,7 @@ import screen as screen_py
 import image as image_py
 
 
-def convert(screen, rgb: np.ndarray, args):
+def convert(screen: screen_py.DHGRScreen, rgb: np.ndarray, args):
     # Conversion matrix from RGB to CAM16UCS colour values.  Indexed by
     # 24-bit RGB value
     base_dir = os.path.dirname(__file__)
