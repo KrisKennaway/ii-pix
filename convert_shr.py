@@ -370,11 +370,10 @@ def convert(screen, rgb: np.ndarray, args):
 
     if args.show_output:
         pygame.init()
-        # TODO: for some reason I need to execute this twice - the first time
-        #  the window is created and immediately destroyed
-        _ = pygame.display.set_mode((640, 400))
         canvas = pygame.display.set_mode((640, 400))
         canvas.fill((0, 0, 0))
+        pygame.display.set_caption("][-Pix image preview")
+        pygame.event.pump()
         pygame.display.flip()
 
     total_image_error = None
@@ -384,9 +383,11 @@ def convert(screen, rgb: np.ndarray, args):
         rgb24_to_cam16ucs=rgb24_to_cam16ucs)
 
     seq = 0
-    for (new_total_image_error, output_4bit, line_to_palette,
-         palettes_rgb12_iigs, palettes_linear_rgb) in cluster_palette.iterate(
-        inner_iterations, outer_iterations):
+    for (
+            new_total_image_error, output_4bit, line_to_palette,
+            palettes_rgb12_iigs,
+            palettes_linear_rgb
+    ) in cluster_palette.iterate(inner_iterations, outer_iterations):
 
         if args.verbose and total_image_error is not None:
             print("Improved quality +%f%% (%f)" % (
@@ -407,20 +408,6 @@ def convert(screen, rgb: np.ndarray, args):
             ).astype(np.uint8)
 
         output_srgb = (image_py.linear_to_srgb(output_rgb)).astype(np.uint8)
-
-        # dither = dither_pattern.PATTERNS[args.dither]()
-        # bitmap = dither_dhr_pyx.dither_image(
-        #     screen, rgb, dither, args.lookahead, args.verbose, rgb24_to_cam16ucs)
-
-        # Show output image by rendering in target palette
-        # output_palette_name = args.show_palette or args.palette
-        # output_palette = palette_py.PALETTES[output_palette_name]()
-        # output_screen = screen_py.DHGRScreen(output_palette)
-        # if output_palette_name == "ntsc":
-        #     output_srgb = output_screen.bitmap_to_image_ntsc(bitmap)
-        # else:
-        #     output_srgb = image_py.linear_to_srgb(
-        #         output_screen.bitmap_to_image_rgb(bitmap)).astype(np.uint8)
         out_image = image_py.resize(
             Image.fromarray(output_srgb), screen.X_RES * 2, screen.Y_RES * 2,
             srgb_output=True)
@@ -429,6 +416,9 @@ def convert(screen, rgb: np.ndarray, args):
             surface = pygame.surfarray.make_surface(
                 np.asarray(out_image).transpose((1, 0, 2)))  # flip y/x axes
             canvas.blit(surface, (0, 0))
+            pygame.display.set_caption("][-Pix image preview [Iteration %d]"
+                                       % seq)
+            pygame.event.pump()
             pygame.display.flip()
 
         unique_colours = np.unique(
@@ -439,15 +429,12 @@ def convert(screen, rgb: np.ndarray, args):
         seq += 1
 
         if args.save_preview:
-            # Save Double hi-res image
+            # Save super hi-res image
             outfile = os.path.join(
-                os.path.splitext(args.output)[0] + "-%d-preview.png" % seq)
+                os.path.splitext(args.output)[0] + "-preview.png")
             out_image.save(outfile, "PNG")
         screen.pack()
-        # with open(args.output, "wb") as f:
-        #     f.write(bytes(screen.aux))
-        #     f.write(bytes(screen.main))
-        with open(args.output, "wb") as f:
+        with open(args.output + ".%d" % seq, "wb") as f:
             f.write(bytes(screen.memory))
 
     if args.show_final_score:
