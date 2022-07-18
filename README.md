@@ -90,11 +90,11 @@ TODO: link to KansasFest 2022 talk slides/video for more details
 
 ## Double Hi-Res
 
-See [here](examples/gallery.md) for more sample Double Hi-Res image conversions.
+See [here](examples/dhr/gallery.md) for more sample Double Hi-Res image conversions.
 
 ### Original
 
-![Two colourful parrots sitting on a branch](examples/parrots-original.png)
+![Two colourful parrots sitting on a branch](examples/dhr/parrots-original.png)
 
  (Source: [Shreygadgil](https://commons.wikimedia.org/wiki/File:Vibrant_Wings.jpg), [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0), via Wikimedia Commons)
 
@@ -103,18 +103,18 @@ See [here](examples/gallery.md) for more sample Double Hi-Res image conversions.
 This image was generated using
 
 ```buildoutcfg
-python convert.py --lookahead 8 --palette openemulator examples/parrots-original.png examples/parrots-iipix-openemulator.dhr
+python convert.py --lookahead 8 --palette openemulator examples/dhr/parrots-original.png examples/dhr/parrots-iipix-openemulator.dhr
 ```
 
 The resulting ][-pix preview PNG image is shown here.
 
-![Two colourful parrots sitting on a branch](examples/parrots-iipix-openemulator-preview.png)
+![Two colourful parrots sitting on a branch](examples/dhr/parrots-iipix-openemulator-preview.png)
 
 ### OpenEmulator screenshot
 
 This is a screenshot taken from OpenEmulator when viewing the Double Hi-res image.
 
-![Two colourful parrots sitting on a branch](examples/parrots-iipix-openemulator-openemulator.png)
+![Two colourful parrots sitting on a branch](examples/dhr/parrots-iipix-openemulator-openemulator.png)
 
 Some difference in colour tone is visible due to blending of colours across pixels (e.g. brown blending into grey, in the background).  This is due to the fact that OpenEmulator simulates the reduced chroma bandwidth of the NTSC signal.
 
@@ -122,7 +122,7 @@ Some difference in colour tone is visible due to blending of colours across pixe
 
 This is an OpenEmulator screenshot of the same image converted with `--palette=ntsc` instead of `--palette=openemulator`.  Colour match to the original is substantially improved, and more colour detail is visible, e.g. in the shading of the background.
 
-![Two colourful parrots sitting on a branch](examples/parrots-iipix-ntsc-openemulator.png)
+![Two colourful parrots sitting on a branch](examples/dhr/parrots-iipix-ntsc-openemulator.png)
 
 ## Super Hi-Res
 
@@ -157,4 +157,4 @@ TODO: add example images
 
 Initial release
 
-![me](examples/kris-iipix-openemulator.png)
+![me](examples/dhr/kris-iipix-openemulator.png)

@@ -67,19 +67,19 @@ By contrast, OpenEmulator uses a more complex (and realistic) band-pass filterin
 
 (Source: [Reinhold Möller](https://commons.wikimedia.org/wiki/File:Nymphaea_caerulea-20091014-RM-115245.jpg), [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0), via Wikimedia Commons)
 
-![Nymphaea](../examples/nymphaea-original.png)
+![Nymphaea](../examples/dhr/nymphaea-original.png)
 
 OpenEmulator screenshot of image produced with `--palette=openemulator --lookahead=8`.  The distorted background colour compared to the original is particularly noticeable.
 
-![Nymphaea](../examples/nymphaea-iipix-openemulator-openemulator.png)
+![Nymphaea](../examples/dhr/nymphaea-iipix-openemulator-openemulator.png)
 
 OpenEmulator screenshot of image produced with `--palette=ntsc --lookahead=8`.  Not only is the background colour a much better match, the image shading and detail is markedly improved.
 
-![Nymphaea](../examples/nymphaea-iipix-ntsc-openemulator.png)
+![Nymphaea](../examples/dhr/nymphaea-iipix-ntsc-openemulator.png)
 
 Rendering the same .dhr image with 4-pixel colour shows the reason for the difference.  For example the background shading is due to pixel sequences that appear (with this simpler and less hardware-accurate rendering scheme) as sequences of grey and dark green, with a lot of blue and red sprinkled in.  In NTSC these pixel sequences combine to produce various shades of green.
 
-![Nymphaea](../examples/nymphaea-iipix-ntsc-preview-openemulator.png)
+![Nymphaea](../examples/dhr/nymphaea-iipix-ntsc-preview-openemulator.png)
 
 # Dithering and Double Hi-Res
 
@@ -188,7 +188,7 @@ The mapping from RGB colour space to CAM16-UCS is quite complex, so to avoid thi
 These three images were converted using the same target (openemulator) palette, using ][-pix, bmp2dhr and a2bestpix (since this is supported by all three), and are shown as screenshots from openemulator.
 
 ### Original
-![original source image](../examples/paperclips-original.png)
+![original source image](../examples/dhr/paperclips-original.png)
 
 (Source: [Purple Sherbet Photography from Worldwide!](https://commons.wikimedia.org/wiki/File:Colourful_assortment_of_paper_clips_(10421946796).jpg), [CC BY 2.0](https://creativecommons.org/licenses/by/2.0), via Wikimedia Commons)
 
@@ -198,24 +198,24 @@ The following images were all generated with a palette approximating OpenEmulato
 
 Preview image and OpenEmulator screenshot
 
-![ii-pix preview](../examples/paperclips-iipix-openemulator-preview.png)
-![ii-pix screenshot](../examples/paperclips-iipix-openemulator-openemulator.png)
+![ii-pix preview](../examples/dhr/paperclips-iipix-openemulator-preview.png)
+![ii-pix screenshot](../examples/dhr/paperclips-iipix-openemulator-openemulator.png)
 
 ### ][-pix NTSC 8-pixel colour (Preview image)
 
 Preview image and OpenEmulator screenshot
 
-![ii-pix preview](../examples/paperclips-iipix-ntsc-preview.png)
-![ii-pix screenshot](../examples/paperclips-iipix-ntsc-openemulator.png)
+![ii-pix preview](../examples/dhr/paperclips-iipix-ntsc-preview.png)
+![ii-pix screenshot](../examples/dhr/paperclips-iipix-ntsc-openemulator.png)
 
 ### bmp2dhr (OpenEmulator screenshot)
-![bmp2dhr screenshot](../examples/paperclips-bmp2dhr-openemulator.png)
+![bmp2dhr screenshot](../examples/dhr/paperclips-bmp2dhr-openemulator.png)
 
 Comparing bmp2dhr under openemulator is the scenario most favourable to it, since the 140px resolution and non-treatment of fringing is masked by the chroma blending.  Colours are similar to ][-pix, but the 140px dithering and lack of gamma correction results in less detail, e.g. in hilights/shadows.
 
 ### a2bestpix (OpenEmulator screenshot)
 
-![a2bestpix screenshot](../examples/paperclips-a2bestpix-openemulator.png)
+![a2bestpix screenshot](../examples/dhr/paperclips-a2bestpix-openemulator.png)
 
 This a2bestpix image is actually atypical in quality, and shows some severe colour errors relating to the pixels that should be close to the orange/brown colours.  These may be due to errors/omissions in the set of "colour blocks".  The effects of not gamma-correcting the source image can also be seen.
 
@@ -225,7 +225,7 @@ The difference in treatment of NTSC artifacts is much more visible when using an
 
 ### Original
 
-![original source image](../examples/groundhog-original.png)
+![original source image](../examples/dhr/groundhog-original.png)
 
 (Source: [Cephas](https://commons.wikimedia.org/wiki/File:Marmota_monax_UL_04.jpg), [CC BY-SA 3.0](https://creativecommons.org/licenses/by-sa/3.0), via Wikimedia Commons)
 
@@ -233,34 +233,34 @@ The following images were generated with a palette matching the one used by Virt
 
 ### ][-pix
 
-![original source image](../examples/groundhog-original.png)
-![ii-pix preview](../examples/groundhog-iipix-virtualii-preview.png)
+![original source image](../examples/dhr/groundhog-original.png)
+![ii-pix preview](../examples/dhr/groundhog-iipix-virtualii-preview.png)
 
 ### bmp2dhr
 
-![original source image](../examples/groundhog-original.png)
-![ii-pix screenshot](../examples/groundhog-bmp2dhr-virtualii.png)
+![original source image](../examples/dhr/groundhog-original.png)
+![ii-pix screenshot](../examples/dhr/groundhog-bmp2dhr-virtualii.png)
 
 The image is heavily impacted by colour fringing, which bmp2dhr does not account for at all.  The difference in brightness of the groundhog's flank is also because bmp2dhr does not gamma-correct the image, so shadows/highlights tend to get blown out.
 
 ### bmp2dhr (OpenEmulator)
 
-![original source image](../examples/groundhog-original.png)
-![ii-pix screenshot](../examples/groundhog-bmp2dhr-openemulator.png)
+![original source image](../examples/dhr/groundhog-original.png)
+![ii-pix screenshot](../examples/dhr/groundhog-bmp2dhr-openemulator.png)
 
 This bmp2dhr image was generated using a palette approximating OpenEmulator's colours (`--palette=openemulator` for ][-pix), i.e. not the same image files as above.
 On OpenEmulator, which simulates NTSC chroma sub-sampling, the fringing is not pronounced but changes the colour balance of the image, e.g. creates a greenish tinge.
 
 ### ][-pix, 4-pixel colour (OpenEmulator)
 
-![original source image](../examples/groundhog-original.png)
-![ii-pix screenshot](../examples/groundhog-iipix-openemulator-openemulator.png)
+![original source image](../examples/dhr/groundhog-original.png)
+![ii-pix screenshot](../examples/dhr/groundhog-iipix-openemulator-openemulator.png)
 
 Colour balance here is also slightly distorted due to not fully accounting for chroma blending.
 
 ### ][-pix, NTSC 8-pixel colour (OpenEmulator)
 
-![original source image](../examples/groundhog-original.png)
-![ii-pix screenshot](../examples/groundhog-iipix-ntsc-openemulator.png)
+![original source image](../examples/dhr/groundhog-original.png)
+![ii-pix screenshot](../examples/dhr/groundhog-iipix-ntsc-openemulator.png)
 
 Detail and colour balance is much improved.
