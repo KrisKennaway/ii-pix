@@ -91,6 +91,11 @@ def main():
         default=False, help='Whether to output the final image quality score '
                             '(default: False)'
     )
+    shr_parser.add_argument(
+        '--save-intermediate', action=argparse.BooleanOptionalAction,
+        default=False, help='Whether to save each intermediate iteration, '
+                            'or just the final image (default: False)'
+    )
     shr_parser.set_defaults(func=convert_shr)
     args = parser.parse_args()
     args.func(args)
