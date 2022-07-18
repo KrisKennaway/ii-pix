@@ -10,8 +10,9 @@ import colour
 import numpy as np
 
 
-def srgb_to_linear_array(a: np.ndarray, gamma=2.4) -> np.ndarray:
+def srgb_to_linear_rgb_array(a: np.ndarray, gamma=2.4) -> np.ndarray:
     return np.where(a <= 0.04045, a / 12.92, ((a + 0.055) / 1.055) ** gamma)
+
 
 def main():
     print("Precomputing conversion matrix from 24-bit RGB to CAM16UCS colour "
@@ -47,7 +48,7 @@ def main():
     # //gs RGB values use gamma-corrected Rec.601 RGB colour space.  We need to
     # convert to Rec.709 RGB as preparation for converting to CAM16UCS.  We
     # do this via the YCbCr intermediate color model.
-    rgb12_iigs = np.clip(srgb_to_linear_array(
+    rgb12_iigs = np.clip(srgb_to_linear_rgb_array(
         np.clip(colour.YCbCr_to_RGB(
             colour.RGB_to_YCbCr(
                 all_rgb12, K=colour.WEIGHTS_YCBCR[
@@ -61,6 +62,7 @@ def main():
     del rgb12_iigs
     np.save("data/rgb12_iigs_to_cam16ucs.npy", rgb12_iigs_to_cam16ucs)
     del rgb12_iigs_to_cam16ucs
+
 
 if __name__ == "__main__":
     main()
