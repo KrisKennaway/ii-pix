@@ -1,0 +1,7 @@
+colour-science
+Cython
+networkx
+numpy
+Pillow
+pygame
+scikit-learn

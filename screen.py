@@ -5,6 +5,68 @@ import numpy as np
 import palette as palette_py
 
 
+class SHR320Screen:
+    X_RES = 320
+    Y_RES = 200
+
+    def __init__(self):
+        self.palettes = {k: np.zeros((16, 3), dtype=np.uint8) for k in
+                         range(16)}
+        # Really 4-bit values, indexing into palette
+        self.pixels = np.array((self.Y_RES, self.X_RES), dtype=np.uint8)
+
+        # Choice of palette per scan-line
+        self.line_palette = np.zeros(self.Y_RES, dtype=np.uint8)
+
+        self.memory = None
+
+    def set_palette(self, idx: int, palette: np.array):
+        if idx < 0 or idx > 15:
+            raise ValueError("Palette index %s must be in range 0 .. 15" % idx)
+        if palette.shape != (16, 3):
+            raise ValueError("Palette size %s != (16, 3)" % palette.shape)
+        # XXX check element range
+        if palette.dtype != np.uint8:
+            raise ValueError("Palette must be of type np.uint8")
+        # print(palette)
+        self.palettes[idx] = np.array(palette)
+
+    def set_pixels(self, pixels):
+        self.pixels = np.array(pixels)
+
+    def pack(self):
+        dump = np.zeros(32768, dtype=np.uint8)
+        for y in range(self.Y_RES):
+            pixel_pair = 0
+            for x in range(self.X_RES):
+                if x % 2 == 0:
+                    pixel_pair |= (self.pixels[y, x] << 4)
+                else:
+                    pixel_pair |= self.pixels[y, x]
+                    # print(pixel_pair)
+                    dump[y * 160 + (x - 1) // 2] = pixel_pair
+                    pixel_pair = 0
+
+        scan_control_offset = 320 * 200 // 2
+        for y in range(self.Y_RES):
+            dump[scan_control_offset + y] = self.line_palette[y]
+
+        palette_offset = scan_control_offset + 256
+        for palette_idx, palette in self.palettes.items():
+            for rgb_idx, rgb in enumerate(palette):
+                r, g, b = rgb
+                assert r <= 15 and g <= 15 and b <= 15
+                # print(r, g, b)
+                rgb_low = (g << 4) | b
+                rgb_hi = r
+                # print(hex(rgb_hi), hex(rgb_low))
+                palette_idx_offset = palette_offset + (32 * palette_idx)
+                dump[palette_idx_offset + (2 * rgb_idx)] = rgb_low
+                dump[palette_idx_offset + (2 * rgb_idx + 1)] = rgb_hi
+
+        self.memory = dump
+
+
 class DHGRScreen:
     X_RES = 560
     Y_RES = 192
