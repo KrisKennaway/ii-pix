@@ -268,6 +268,9 @@ class ClusterPalette:
             # If the k-means clustering returned fewer than 16 unique colours,
             # fill out the remainder with the most common pixels colours that
             # have not yet been used.
+            #
+            # TODO: this seems like an opportunity to do something better -
+            #   e.g. forcibly split clusters and iterate the clustering
             palette_rgb12_iigs = self._fill_short_palette(
                 palette_rgb12_iigs, most_frequent_colours)
 
