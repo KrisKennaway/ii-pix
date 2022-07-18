@@ -50,10 +50,11 @@ The following flags are supported in both `dhr` and `shr` modes:
 * `--verbose` Show progress during conversion (default: False)
 * `--gamma-correct` Gamma-correct image by this value (default: 2.4)
 
+See below for DHR- and SHR- specific instructions.
 
 ## Double Hi-Res
 
-To convert an image to double hi-res, the simplest usage is:
+To convert an image to Double Hi-Res (560x192, 16 colours but [it's complicated](docs/dhr.md)), the simplest usage is:
 
 ```buildoutcfg
 python convert.py dhr --palette ntsc <input> <output.dhr>
@@ -69,42 +70,6 @@ TODO: document flags
 
 For more details about Double Hi-Res graphics and the conversion process, see [here](docs/dhr.md).
 
-### Examples
-
-See [here](examples/gallery.md) for more sample Double Hi-Res image conversions.
-
-#### Original
-
-![Two colourful parrots sitting on a branch](examples/parrots-original.png)
-
- (Source: [Shreygadgil](https://commons.wikimedia.org/wiki/File:Vibrant_Wings.jpg), [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0), via Wikimedia Commons)
-
-#### ][-pix preview image
-
-This image was generated using
-
-```buildoutcfg
-python convert.py --lookahead 8 --palette openemulator examples/parrots-original.png examples/parrots-iipix-openemulator.dhr
-```
-
-The resulting ][-pix preview PNG image is shown here.
-
-![Two colourful parrots sitting on a branch](examples/parrots-iipix-openemulator-preview.png)
-
-#### OpenEmulator screenshot
-
-This is a screenshot taken from OpenEmulator when viewing the Double Hi-res image.
-
-![Two colourful parrots sitting on a branch](examples/parrots-iipix-openemulator-openemulator.png)
-
-Some difference in colour tone is visible due to blending of colours across pixels (e.g. brown blending into grey, in the background).  This is due to the fact that OpenEmulator simulates the reduced chroma bandwidth of the NTSC signal.
-
-][-pix also allows modeling this NTSC signal behaviour, which effectively allows access to more than 16 DHGR colours, through carefully chosen sequences of pixels (see below for more details).  The resulting images have much higher quality, but only when viewed on a suitable target (e.g. OpenEmulator, or real hardware).  On other targets the colour balance tends to be skewed, though image detail is still good.
-
-This is an OpenEmulator screenshot of the same image converted with `--palette=ntsc` instead of `--palette=openemulator`.  Colour match to the original is substantially improved, and more colour detail is visible, e.g. in the shading of the background.
-
-![Two colourful parrots sitting on a branch](examples/parrots-iipix-ntsc-openemulator.png)
-
 ## Super Hi-Res
 
 To convert an image to Super Hi-Res (320x200, up to 256 colours), the simplest usage is:
@@ -119,7 +84,47 @@ supported for `shr` conversions:
 * `--fixed-colours` How many colours to fix as identical across all 16 SHR palettes. (default: 0)
 * `--show-final-score` Whether to output the final image quality score (default: False)
 
-### Examples
+TODO: link to KansasFest 2022 talk slides/video for more details
+
+# Examples
+
+## Double Hi-Res
+
+See [here](examples/gallery.md) for more sample Double Hi-Res image conversions.
+
+### Original
+
+![Two colourful parrots sitting on a branch](examples/parrots-original.png)
+
+ (Source: [Shreygadgil](https://commons.wikimedia.org/wiki/File:Vibrant_Wings.jpg), [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0), via Wikimedia Commons)
+
+### ][-pix preview image
+
+This image was generated using
+
+```buildoutcfg
+python convert.py --lookahead 8 --palette openemulator examples/parrots-original.png examples/parrots-iipix-openemulator.dhr
+```
+
+The resulting ][-pix preview PNG image is shown here.
+
+![Two colourful parrots sitting on a branch](examples/parrots-iipix-openemulator-preview.png)
+
+### OpenEmulator screenshot
+
+This is a screenshot taken from OpenEmulator when viewing the Double Hi-res image.
+
+![Two colourful parrots sitting on a branch](examples/parrots-iipix-openemulator-openemulator.png)
+
+Some difference in colour tone is visible due to blending of colours across pixels (e.g. brown blending into grey, in the background).  This is due to the fact that OpenEmulator simulates the reduced chroma bandwidth of the NTSC signal.
+
+][-pix also allows modeling this NTSC signal behaviour, which effectively allows access to more than 16 DHGR colours, through carefully chosen sequences of pixels (see below for more details).  The resulting images have much higher quality, but only when viewed on a suitable target (e.g. OpenEmulator, or real hardware).  On other targets the colour balance tends to be skewed, though image detail is still good.
+
+This is an OpenEmulator screenshot of the same image converted with `--palette=ntsc` instead of `--palette=openemulator`.  Colour match to the original is substantially improved, and more colour detail is visible, e.g. in the shading of the background.
+
+![Two colourful parrots sitting on a branch](examples/parrots-iipix-ntsc-openemulator.png)
+
+## Super Hi-Res
 
 TODO: add example images
 
