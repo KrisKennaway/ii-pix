@@ -1,6 +1,6 @@
-# Gallery of images
+# Gallery of Double Hi-Res images
 
-Here are some more images converted with ][-pix.
+Here are some more Double Hi-Res images converted with ][-pix.
 
 * (top-left) original image
 * (top-right) image converted for display in Virtual II emulator (converted with `--palette virtualii --lookahead 8 --dither jarvis-mod`)
