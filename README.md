@@ -1,6 +1,7 @@
 # ][-pix 2.0
 
-][-pix is an image conversion utility targeting Apple II graphics modes, currently Double Hi-Res and Super Hi-Res.
+][-pix is an image conversion utility targeting Apple II graphics modes, currently Double Hi-Res
+(enhanced //e, //c, //gs) and Super Hi-Res (//gs).
 
 ## Installation
 
@@ -103,7 +104,7 @@ See [here](examples/dhr/gallery.md) for more sample Double Hi-Res image conversi
 This image was generated using
 
 ```buildoutcfg
-python convert.py --lookahead 8 --palette openemulator examples/dhr/parrots-original.png examples/dhr/parrots-iipix-openemulator.dhr
+python convert.py dhr --lookahead 8 --palette openemulator examples/dhr/parrots-original.png examples/dhr/parrots-iipix-openemulator.dhr
 ```
 
 The resulting ][-pix preview PNG image is shown here.
@@ -126,7 +127,24 @@ This is an OpenEmulator screenshot of the same image converted with `--palette=n
 
 ## Super Hi-Res
 
-TODO: add example images
+See [here](examples/shr/gallery.md) for more sample Super Hi-Res image conversions.
+
+### Original
+
+![European rabbit kitten](examples/shr/rabbit-kitten-original.jpg)
+
+
+ (Source: [Alexis LOURS](https://commons.wikimedia.org/wiki/File:European_rabbit_(Oryctolagus_cuniculus)_kitten.jpg), Licensed under [Creative Commons Attribution 2.0 Generic](https://creativecommons.org/licenses/by/2.0/deed.en), via Wikimedia Commons)
+
+### ][-pix preview image
+
+This image was generated using
+
+```buildoutcfg
+python convert.py shr examples/shr/rabbit-kitten-original.png examples/shr/rabbit-kitten-original.shr
+```
+
+![European rabbit kitten](examples/shr/rabbit-kitten-iipix.png)
 
 # Future work
 
