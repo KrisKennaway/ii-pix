@@ -71,10 +71,9 @@ class DHGRScreen:
     X_RES = 560
     Y_RES = 192
 
-    def __init__(self, palette: palette_py.Palette):
+    def __init__(self):
         self.main = np.zeros(8192, dtype=np.uint8)
         self.aux = np.zeros(8192, dtype=np.uint8)
-        self.palette = palette
 
     @staticmethod
     def y_to_base_addr(y: int) -> int:
@@ -111,6 +110,11 @@ class DHGRScreen:
             self.aux[addr:addr + 40] = aux_col[y, :]
             self.main[addr:addr + 40] = main_col[y, :]
         return
+
+class DHGRNTSCScreen(DHGRScreen):
+    def __init__(self, palette: palette_py.Palette):
+        self.palette = palette
+        super(DHGRNTSCScreen, self).__init__()
 
     def bitmap_to_image_rgb(self, bitmap: np.ndarray) -> np.ndarray:
         """Convert our 2-bit bitmap image into a RGB image.

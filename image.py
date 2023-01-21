@@ -45,3 +45,6 @@ def resize(
                 np.uint8))
     else:
         return res
+
+def resize_mono(image: Image, x_res, y_res) -> Image:
+    return image.resize((x_res, y_res), Image.LANCZOS)

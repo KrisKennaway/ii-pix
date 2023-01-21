@@ -362,7 +362,9 @@ class ClusterPalette:
             self._palette_lines[palette_idx] = [worst_line]
 
 
-def convert(screen, rgb: np.ndarray, args):
+def convert(screen, image: Image, args):
+    rgb = np.array(image).astype(np.float32) / 255
+
     # Conversion matrix from RGB to CAM16UCS colour values.  Indexed by
     # 24-bit RGB value
     base_dir = os.path.dirname(__file__)
