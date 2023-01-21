@@ -1,4 +1,4 @@
-# ][-pix 2.0
+# ][-pix 2.1
 
 ][-pix is an image conversion utility targeting Apple II graphics modes, currently Double Hi-Res
 (enhanced //e, //c, //gs) and Super Hi-Res (//gs).
@@ -39,11 +39,11 @@ To convert an image, the basic command is:
 python convert.py <mode> [<flags>] <input> <output>
 ```
 where
-* `mode` is `dhr` for Double Hi-Res (560x192), or `shr` for Super Hi-Res (320x200)
+* `mode` is `dhr` for Double Hi-Res Colour (560x192), `dhr_mono` for Double Hi-Res Mono (560x192), or `shr` for Super Hi-Res (320x200)
 * `input` is the source image file to convert (e.g. `my-image.jpg`)
 * `output` is the output filename to produce (e.g. `my-image.dhr`)
 
-The following flags are supported in both `dhr` and `shr` modes:
+The following flags are supported in all modes:
 
 * `--show-input` Whether to show the input image before conversion. (default: False)
 * `--show-output` Whether to show the output image after conversion. (default: True)
@@ -157,6 +157,11 @@ python convert.py shr examples/shr/rabbit-kitten-original.png examples/shr/rabbi
 * I would like to be able to find an ordered dithering algorithm that works well for Apple II graphics.  Ordered dithering specifically avoids diffusing errors arbitrarily across the image, which produces visual noise (and unnecessary deltas) when combined with animation.  For example such a thing may work well with my [II-Vision](https://github.com/KrisKennaway/ii-vision) video streamer.  However the properties of NTSC artifact colour seem to be in conflict with these requirements, i.e. pixel changes *always* propagate colour to some extent.
 
 # Version history
+
+## v2.1 (2023-01-21)
+
+* Added support for DHGR mono conversions
+* Fixed compatibility with python 3.10
 
 ## v2.0 (2022-07-16)
 

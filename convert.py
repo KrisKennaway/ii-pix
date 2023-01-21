@@ -79,6 +79,10 @@ def main():
              "value of --palette)")
     dhr_parser.set_defaults(func=convert_dhr)
 
+    dhr_mono_parser = subparsers.add_parser("dhr_mono")
+    add_common_args(dhr_mono_parser)
+    dhr_mono_parser.set_defaults(func=convert_dhr_mono)
+
     shr_parser = subparsers.add_parser("shr")
     add_common_args(shr_parser)
     shr_parser.add_argument(
@@ -106,25 +110,29 @@ def prepare_image(image_filename: str, show_input: bool, screen,
     # Open and resize source image
     image = image_py.open(image_filename)
     if show_input:
-        image_py.resize(image, screen.X_RES, screen.Y_RES,
-                        srgb_output=False).show()
-    rgb = np.array(
-        image_py.resize(image, screen.X_RES, screen.Y_RES,
-                        gamma=gamma_correct)).astype(np.float32) / 255
-    return rgb
-
+        image_py.resize(image, screen.X_RES, screen.Y_RES * 2,
+                        srgb_output=True).show()
+    return image_py.resize(image, screen.X_RES, screen.Y_RES,
+                           gamma=gamma_correct)
 
 def convert_dhr(args):
     palette = palette_py.PALETTES[args.palette]()
-    screen = screen_py.DHGRScreen(palette)
-    rgb = prepare_image(args.input, args.show_input, screen, args.gamma_correct)
-    convert_dhr_py.convert(screen, rgb, args)
+    screen = screen_py.DHGRNTSCScreen(palette)
+    image = prepare_image(args.input, args.show_input, screen,
+                         args.gamma_correct)
+    convert_dhr_py.convert(screen, image, args)
+
+
+def convert_dhr_mono(args):
+    screen = screen_py.DHGRScreen()
+    image = prepare_image(args.input, args.show_input, screen, args.gamma_correct)
+    convert_dhr_py.convert_mono(screen, image, args)
 
 
 def convert_shr(args):
     screen = screen_py.SHR320Screen()
-    rgb = prepare_image(args.input, args.show_input, screen, args.gamma_correct)
-    convert_shr_py.convert(screen, rgb, args)
+    image = prepare_image(args.input, args.show_input, screen, args.gamma_correct)
+    convert_shr_py.convert(screen, image, args)
 
 
 if __name__ == "__main__":

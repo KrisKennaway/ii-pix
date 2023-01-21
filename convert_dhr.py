@@ -10,7 +10,27 @@ import screen as screen_py
 import image as image_py
 
 
-def convert(screen: screen_py.DHGRScreen, rgb: np.ndarray, args):
+def  _output(out_image: Image, args):
+   if args.show_output:
+        out_image.show()
+
+   if args.save_preview:
+       # Save Double hi-res image
+       outfile = os.path.join(
+           os.path.splitext(args.output)[0] + "-preview.png")
+       out_image.save(outfile, "PNG")
+
+
+def _write(screen: screen_py.DHGRScreen, bitmap: np.ndarray, args):
+    screen.pack(bitmap)
+    with open(args.output, "wb") as f:
+        f.write(bytes(screen.aux))
+        f.write(bytes(screen.main))
+
+
+def convert(screen: screen_py.DHGRNTSCScreen, image: Image, args):
+    rgb = np.array(image).astype(np.float32) / 255
+
     # Conversion matrix from RGB to CAM16UCS colour values.  Indexed by
     # 24-bit RGB value
     base_dir = os.path.dirname(__file__)
@@ -24,7 +44,7 @@ def convert(screen: screen_py.DHGRScreen, rgb: np.ndarray, args):
     # Show output image by rendering in target palette
     output_palette_name = args.show_palette or args.palette
     output_palette = palette_py.PALETTES[output_palette_name]()
-    output_screen = screen_py.DHGRScreen(output_palette)
+    output_screen = screen_py.DHGRNTSCScreen(output_palette)
     if output_palette_name == "ntsc":
         output_srgb = output_screen.bitmap_to_image_ntsc(bitmap)
     else:
@@ -34,15 +54,15 @@ def convert(screen: screen_py.DHGRScreen, rgb: np.ndarray, args):
         Image.fromarray(output_srgb), screen.X_RES, screen.Y_RES * 2,
         srgb_output=True)
 
-    if args.show_output:
-        out_image.show()
+    _output(out_image, args)
+    _write(screen, bitmap, args)
 
-    if args.save_preview:
-        # Save Double hi-res image
-        outfile = os.path.join(
-            os.path.splitext(args.output)[0] + "-preview.png")
-        out_image.save(outfile, "PNG")
-    screen.pack(bitmap)
-    with open(args.output, "wb") as f:
-        f.write(bytes(screen.aux))
-        f.write(bytes(screen.main))
+def convert_mono(screen: screen_py.DHGRScreen, image: Image, args):
+    image = image.convert("1")
+
+    out_image = Image.fromarray((np.array(image) * 255).astype(np.uint8))
+    out_image = image_py.resize(
+        out_image, screen.X_RES, screen.Y_RES * 2, srgb_output=True)
+
+    _output(out_image, args)
+    _write(screen, np.array(image).astype(bool), args)

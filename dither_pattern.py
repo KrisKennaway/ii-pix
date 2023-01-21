@@ -11,7 +11,7 @@ class DitherPattern:
 class NoDither(DitherPattern):
     """No dithering."""
     PATTERN = np.array(((0, 0), (0, 0)),
-                       dtype=np.float32).reshape(2, 2) / np.float(16)
+                       dtype=np.float32).reshape(2, 2) / np.float32(16)
     ORIGIN = (0, 1)
 
 
@@ -20,7 +20,7 @@ class FloydSteinbergDither(DitherPattern):
     # 0 * 7
     # 3 5 1
     PATTERN = np.array(((0, 0, 7), (3, 5, 1)),
-                       dtype=np.float32).reshape(2, 3) / np.float(16)
+                       dtype=np.float32).reshape(2, 3) / np.float32(16)
     ORIGIN = (0, 1)
 
 
@@ -31,7 +31,7 @@ class FloydSteinbergDither2(DitherPattern):
     PATTERN = np.array(
         ((0, 0, 0, 0, 0, 7),
          (3, 5, 1, 0, 0, 0)),
-        dtype=np.float32).reshape(2, 6) / np.float(16)
+        dtype=np.float32).reshape(2, 6) / np.float32(16)
     ORIGIN = (0, 2)
 
 

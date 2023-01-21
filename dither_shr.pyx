@@ -315,13 +315,15 @@ cdef (unsigned char)[:, ::1] _convert_cam16ucs_to_rgb12_iigs(float[:, ::1] point
         rgb = colour.convert(point_cam, "CAM16UCS", "RGB").astype(np.float32)
 
     # TODO: precompute this conversion matrix since it's static.  This accounts for about 10% of the CPU time here.
-    rgb12_iigs = np.clip(
-        # Convert to Rec.601 R'G'B'
-        colour.YCbCr_to_RGB(
-            # Gamma correct and convert Rec.709 R'G'B' to YCbCr
-            colour.RGB_to_YCbCr(
-                linear_to_srgb_array(rgb), K=colour.WEIGHTS_YCBCR['ITU-R BT.709']),
-            K=colour.WEIGHTS_YCBCR['ITU-R BT.601']), 0, 1).astype(np.float32) * 15
+    rgb12_iigs = np.ascontiguousarray(
+        np.clip(
+            # Convert to Rec.601 R'G'B'
+            colour.YCbCr_to_RGB(
+                # Gamma correct and convert Rec.709 R'G'B' to YCbCr
+                colour.RGB_to_YCbCr(
+                    linear_to_srgb_array(rgb), K=colour.WEIGHTS_YCBCR['ITU-R BT.709']),
+                K=colour.WEIGHTS_YCBCR['ITU-R BT.601']), 0, 1)
+        ).astype(np.float32) * 15
     return np.round(rgb12_iigs).astype(np.uint8)
 
 # Wrapper around _convert_cam16ucs_to_rgb12_iigs to allow calling from python while retaining fast path for cython

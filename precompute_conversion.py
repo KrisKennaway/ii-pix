@@ -30,7 +30,8 @@ def main():
         rgb24_to_cam16ucs = colour.convert(all_rgb24, "RGB", "CAM16UCS").astype(
             np.float32)
     del all_rgb24
-    np.save("data/rgb24_to_cam16ucs.npy", rgb24_to_cam16ucs)
+    np.save("data/rgb24_to_cam16ucs.npy", np.ascontiguousarray(
+        rgb24_to_cam16ucs))
     del rgb24_to_cam16ucs
 
     print("Precomputing conversion matrix from 12-bit //gs RGB to CAM16UCS "
@@ -60,7 +61,8 @@ def main():
         rgb12_iigs_to_cam16ucs = colour.convert(
             rgb12_iigs, "RGB", "CAM16UCS").astype(np.float32)
     del rgb12_iigs
-    np.save("data/rgb12_iigs_to_cam16ucs.npy", rgb12_iigs_to_cam16ucs)
+    np.save("data/rgb12_iigs_to_cam16ucs.npy", np.ascontiguousarray(
+        rgb12_iigs_to_cam16ucs))
     del rgb12_iigs_to_cam16ucs
 
 
