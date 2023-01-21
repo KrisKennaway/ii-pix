@@ -161,7 +161,8 @@ class DHGRScreen:
 
         # Apply effect of saturation
         yuv_to_rgb = np.array(
-            ((1, 0, 0), (0, saturation, 0), (0, 0, saturation)), dtype=np.float)
+            ((1, 0, 0), (0, saturation, 0), (0, 0, saturation)),
+            dtype=np.float32)
         # Apply hue phase rotation
         yuv_to_rgb = np.matmul(np.array(
             ((1, 0, 0), (0, np.cos(hue), np.sin(hue)), (0, -np.sin(hue),
