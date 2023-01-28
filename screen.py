@@ -1,6 +1,5 @@
 """Representation of Apple II screen memory."""
 
-import math
 import numpy as np
 import palette as palette_py
 
@@ -110,6 +109,7 @@ class DHGRScreen:
             self.aux[addr:addr + 40] = aux_col[y, :]
             self.main[addr:addr + 40] = main_col[y, :]
         return
+
 
 class DHGRNTSCScreen(DHGRScreen):
     def __init__(self, palette: palette_py.Palette):

@@ -10,15 +10,15 @@ import screen as screen_py
 import image as image_py
 
 
-def  _output(out_image: Image, args):
-   if args.show_output:
+def _output(out_image: Image, args):
+    if args.show_output:
         out_image.show()
 
-   if args.save_preview:
-       # Save Double hi-res image
-       outfile = os.path.join(
-           os.path.splitext(args.output)[0] + "-preview.png")
-       out_image.save(outfile, "PNG")
+    if args.save_preview:
+        # Save Double hi-res image
+        outfile = os.path.join(
+            os.path.splitext(args.output)[0] + "-preview.png")
+        out_image.save(outfile, "PNG")
 
 
 def _write(screen: screen_py.DHGRScreen, bitmap: np.ndarray, args):
@@ -56,6 +56,7 @@ def convert(screen: screen_py.DHGRNTSCScreen, image: Image, args):
 
     _output(out_image, args)
     _write(screen, bitmap, args)
+
 
 def convert_mono(screen: screen_py.DHGRScreen, image: Image, args):
     image = image.convert("1")
