@@ -3,6 +3,7 @@
 import argparse
 import numpy as np
 
+import convert_hgr as convert_hgr_py
 import convert_dhr as convert_dhr_py
 import convert_shr as convert_shr_py
 import dither_pattern
@@ -46,6 +47,27 @@ def add_common_args(parser):
 def main():
     parser = argparse.ArgumentParser()
     subparsers = parser.add_subparsers(required=True)
+
+    hgr_parser = subparsers.add_parser("hgr")
+    add_common_args(hgr_parser)
+    hgr_parser.add_argument(
+        '--dither', type=str, choices=list(dither_pattern.PATTERNS.keys()),
+        default=dither_pattern.DEFAULT_PATTERN,
+        help="Error distribution pattern to apply when dithering (default: "
+             + dither_pattern.DEFAULT_PATTERN + ")")
+    hgr_parser.add_argument(
+        '--palette', type=str, choices=list(set(palette_py.PALETTES.keys())),
+        default=palette_py.DEFAULT_PALETTE,
+        help='RGB colour palette to dither to.  "ntsc" blends colours over 8 '
+             'pixels and gives better image quality on targets that '
+             'use/emulate NTSC, but can be substantially slower.  Other '
+             'palettes determine colours based on 4 pixel sequences '
+             '(default: ' + palette_py.DEFAULT_PALETTE + ")")
+    hgr_parser.add_argument(
+        '--show-palette', type=str, choices=list(palette_py.PALETTES.keys()),
+        help="RGB colour palette to use when --show_output (default: "
+             "value of --palette)")
+    hgr_parser.set_defaults(func=convert_hgr)
 
     dhr_parser = subparsers.add_parser("dhr")
     add_common_args(dhr_parser)
@@ -125,6 +147,13 @@ def convert_dhr(args):
     image = prepare_image(args.input, args.show_input, screen,
                           args.gamma_correct)
     convert_dhr_py.convert(screen, image, args)
+
+def convert_hgr(args):
+    palette = palette_py.PALETTES[args.palette]()
+    screen = screen_py.HGRScreen(palette)
+    image = prepare_image(args.input, args.show_input, screen,
+                          args.gamma_correct)
+    convert_hgr_py.convert(screen, image, args)
 
 
 def convert_dhr_mono(args):
