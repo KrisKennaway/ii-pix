@@ -10,6 +10,7 @@ import image as image_py
 import palette as palette_py
 import screen as screen_py
 
+
 # TODO:
 #  - support additional graphics modes (easiest --> hardest):
 #    - LR/DLR
@@ -52,10 +53,12 @@ def main():
     def validate_lookahead(arg: int) -> int:
         try:
             int_arg = int(arg)
-            if int_arg < 1:
-                return int_arg
         except Exception:
+            raise argparse.ArgumentTypeError("--lookahead must be an integer")
+        if int_arg < 1:
             raise argparse.ArgumentTypeError("--lookahead must be at least 1")
+        return int_arg
+
     dhr_parser.add_argument(
         "--lookahead", type=validate_lookahead, default=8,
         help=("How many pixels to look ahead to compensate for NTSC colour "
@@ -115,23 +118,26 @@ def prepare_image(image_filename: str, show_input: bool, screen,
     return image_py.resize(image, screen.X_RES, screen.Y_RES,
                            gamma=gamma_correct)
 
+
 def convert_dhr(args):
     palette = palette_py.PALETTES[args.palette]()
     screen = screen_py.DHGRNTSCScreen(palette)
     image = prepare_image(args.input, args.show_input, screen,
-                         args.gamma_correct)
+                          args.gamma_correct)
     convert_dhr_py.convert(screen, image, args)
 
 
 def convert_dhr_mono(args):
     screen = screen_py.DHGRScreen()
-    image = prepare_image(args.input, args.show_input, screen, args.gamma_correct)
+    image = prepare_image(args.input, args.show_input, screen,
+                          args.gamma_correct)
     convert_dhr_py.convert_mono(screen, image, args)
 
 
 def convert_shr(args):
     screen = screen_py.SHR320Screen()
-    image = prepare_image(args.input, args.show_input, screen, args.gamma_correct)
+    image = prepare_image(args.input, args.show_input, screen,
+                          args.gamma_correct)
     convert_shr_py.convert(screen, image, args)
 
 
