@@ -6,6 +6,8 @@ colours when optimizing the image conversion (since this perceptual
 difference corresponds to the Euclidean distance in this colour space)
 """
 
+import os
+
 import colour
 import numpy as np
 
@@ -14,7 +16,15 @@ def srgb_to_linear_rgb_array(a: np.ndarray, gamma=2.4) -> np.ndarray:
     return np.where(a <= 0.04045, a / 12.92, ((a + 0.055) / 1.055) ** gamma)
 
 
+DATA_DIR = 'data'
+
+
 def main():
+    try:
+        os.mkdir(DATA_DIR, mode=0o755)
+    except FileExistsError:
+        pass
+
     print("Precomputing conversion matrix from 24-bit RGB to CAM16UCS colour "
           "space")
     # Compute matrix of all 24-bit RGB values, normalized to 0..1 range
@@ -30,7 +40,7 @@ def main():
         rgb24_to_cam16ucs = colour.convert(all_rgb24, "RGB", "CAM16UCS").astype(
             np.float32)
     del all_rgb24
-    np.save("data/rgb24_to_cam16ucs.npy", np.ascontiguousarray(
+    np.save("%s/rgb24_to_cam16ucs.npy" % DATA_DIR, np.ascontiguousarray(
         rgb24_to_cam16ucs))
     del rgb24_to_cam16ucs
 
@@ -61,7 +71,7 @@ def main():
         rgb12_iigs_to_cam16ucs = colour.convert(
             rgb12_iigs, "RGB", "CAM16UCS").astype(np.float32)
     del rgb12_iigs
-    np.save("data/rgb12_iigs_to_cam16ucs.npy", np.ascontiguousarray(
+    np.save("%s/rgb12_iigs_to_cam16ucs.npy" % DATA_DIR, np.ascontiguousarray(
         rgb12_iigs_to_cam16ucs))
     del rgb12_iigs_to_cam16ucs
 
