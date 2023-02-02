@@ -100,10 +100,16 @@ cdef unsigned int compute_fat_pixels(unsigned int screen_byte, unsigned char las
     return result
 
 
+# Context parametrizes the differences between DHGR and HGR image optimization
 cdef struct Context:
+    # How many bit positions to lookahead when optimizing
     unsigned char bit_lookahead
+    # How many screen pixels produced by bit_lookahead.  This is 1:1 for DHGR but for HGR 8 bits in memory produce
+    # 14 or 15 screen pixels (see compute_fat_pixels above)
     unsigned char pixel_lookahead
+    # HGR has a NTSC phase shift relative to DHGR which rotates the effective mappings from screen pixels to colours
     unsigned char phase_shift
+    # Non-zero for HGR optimization
     unsigned char is_hgr
 
 
