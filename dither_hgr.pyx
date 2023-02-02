@@ -75,10 +75,17 @@ cdef inline unsigned char shift_pixel_window(
     return ((last_pixels >> shift_right_by) | shifted_next_pixels) & window_mask
 
 
+# Given a byte to store on the hi-res screen, compute the sequence of 560-resolution pixels that will be displayed.
+# Hi-res graphics works like this:
+# - Each of the low 7 bits in screen_byte results in enabling or disabling two sequential 560-resolution pixels.
+# - pixel screen order is from LSB to MSB
+# - if bit 8 (the "palette bit) is set then the 14-pixel sequence is shifted one position to the right, and the
+#   left-most pixel is filled in by duplicating the right-most pixel controlled by the previous screen byte (i.e. bit 7)
+# - this gives a 15 or 14 pixel sequence depending on whether or not the palette bit is set.
 cdef unsigned int compute_fat_pixels(unsigned int screen_byte, unsigned char last_pixels) nogil:
     cdef int i, bit, fat_bit
     cdef unsigned int result = 0
-    result = 0
+
     for i in range(7):
         bit = (screen_byte >> i) & 0b1
         fat_bit = bit << 1 | bit
@@ -108,7 +115,7 @@ cdef unsigned int compute_fat_pixels(unsigned int screen_byte, unsigned char las
 #
 cdef int dither_lookahead(Dither* dither, float[:, :, ::1] palette_cam16, float[:, :, ::1] palette_rgb,
         float[:, :, ::1] image_rgb, int x, int y, int lookahead, unsigned char last_pixels,
-        int x_res, float[:,::1] rgb_to_cam16ucs, unsigned char palette_depth, unsigned char last_byte):
+        int x_res, float[:,::1] rgb_to_cam16ucs, unsigned char palette_depth) nogil:
     cdef int candidate_pixels, i, j, fat_pixels
     cdef float[3] quant_error
     cdef int best
@@ -125,7 +132,6 @@ cdef int dither_lookahead(Dither* dither, float[:, :, ::1] palette_cam16, float[
     cdef int lah_shape2 = 3
     cdef float *lah_image_rgb = <float *> malloc(lah_shape1 * lah_shape2 * sizeof(float))
 
-    cdef float penalty
 
     # For each 2**lookahead possibilities for the on/off state of the next lookahead pixels, apply error diffusion
     # and compute the total squared error to the source image.  Since we only have two possible colours for each
@@ -156,19 +162,12 @@ cdef int dither_lookahead(Dither* dither, float[:, :, ::1] palette_cam16, float[
             # choices, in order to compute the total error.
             for j in range(3):
                 quant_error[j] = lah_image_rgb[i * lah_shape2 + j] - palette_rgb[next_pixels, phase, j]
-
             apply_one_line(dither, xl, xr, i, lah_image_rgb, lah_shape2, quant_error)
 
             lah_cam16ucs = common.convert_rgb_to_cam16ucs(
                 rgb_to_cam16ucs, lah_image_rgb[i*lah_shape2], lah_image_rgb[i*lah_shape2+1],
                 lah_image_rgb[i*lah_shape2+2])
-
-            #if (last_byte & 0x40) and (candidate_pixels & 0x80) != (last_byte & 0x80):
-            #    penalty = 1.2
-            #else:
-            #    penalty = 1.0
-
-            total_error += common.colour_distance_squared(lah_cam16ucs, palette_cam16[next_pixels, phase]) * penalty
+            total_error += common.colour_distance_squared(lah_cam16ucs, palette_cam16[next_pixels, phase])
 
             if total_error >= best_error:
                 # No need to continue
@@ -177,9 +176,6 @@ cdef int dither_lookahead(Dither* dither, float[:, :, ::1] palette_cam16, float[
         if total_error < best_error:
             best_error = total_error
             best = candidate_pixels
-
-    #if penalty > 1:
-    #    print("Mismatch at %d, %s %s" % (x, bin(last_byte), bin(best)))
 
     free(lah_image_rgb)
     return best
@@ -234,8 +230,6 @@ cdef void apply(Dither* dither, int x_res, int y_res, int x, int y, float[:,:,::
             error_fraction = dither.pattern[(i - y) * dither.x_shape + j - x + dither.x_origin]
             for k in range(3):
                 image[i,j,k] = common.clip(image[i,j,k] + error_fraction * quant_error[k], 0, 1)
-            #if x % 14 == 13:
-            #    return
 
 cdef image_nbit_to_bitmap(
     (unsigned char)[:, ::1] image_nbit, unsigned int x_res, unsigned int y_res, unsigned char palette_depth):
@@ -307,7 +301,6 @@ def dither_image(
     cdef (unsigned char)[:, ::1] linear_bytemap = np.zeros((192, 40), dtype=np.uint8)
     cdef unsigned int fat_pixels
 
-
     for y in range(yres):
         if verbose:
             print("%d/%d" % (y, yres))
@@ -320,7 +313,7 @@ def dither_image(
                 # to the source image over the succeeding N pixels
                 best_next_pixels = dither_lookahead(
                         &cdither, palette_cam16, palette_rgb, image_rgb, x, y, lookahead, output_pixel_nbit, xres,
-                        rgb_to_cam16ucs, palette_depth, best_next_pixels)
+                        rgb_to_cam16ucs, palette_depth)
                 linear_bytemap[y, x // 14] = best_next_pixels
                 fat_pixels = compute_fat_pixels(best_next_pixels, output_pixel_nbit)
 
@@ -328,11 +321,9 @@ def dither_image(
             output_pixel_nbit = shift_pixel_window(
                     output_pixel_nbit, fat_pixels, shift_right_by=x%14 + 1, window_width=palette_depth)
             # Apply error diffusion from chosen output pixel value
-
             for i in range(3):
                 output_pixel_rgb[i] = palette_rgb[output_pixel_nbit, x % 4, i]
                 quant_error[i] = image_rgb[y,x,i] - output_pixel_rgb[i]
-
             apply(&cdither, xres, yres, x, y, image_rgb, quant_error)
 
             # Update image with our chosen image pixel
