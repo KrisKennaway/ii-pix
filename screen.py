@@ -1,12 +1,25 @@
 """Representation of Apple II screen memory."""
 
+from enum import Enum
 import numpy as np
 import palette as palette_py
+
+
+class Mode(Enum):
+    LO_RES = 1
+    DOUBLE_LO_RES = 2
+    HI_RES = 3
+    DOUBLE_HI_RES = 4
+    SUPER_HI_RES_320 = 5
+    SUPER_HI_RES_640 = 6
+    SUPER_HI_RES_3200 = 7
 
 
 class SHR320Screen:
     X_RES = 320
     Y_RES = 200
+
+    MODE = Mode.SUPER_HI_RES_320
 
     def __init__(self):
         self.palettes = {k: np.zeros((16, 3), dtype=np.uint8) for k in
@@ -70,6 +83,8 @@ class DHGRScreen:
     X_RES = 560
     Y_RES = 192
 
+    MODE = Mode.DOUBLE_HI_RES
+
     def __init__(self):
         self.main = np.zeros(8192, dtype=np.uint8)
         self.aux = np.zeros(8192, dtype=np.uint8)
@@ -113,6 +128,8 @@ class DHGRScreen:
 class HGRScreen:
     X_RES = 560
     Y_RES = 192
+
+    MODE = Mode.HI_RES
 
     def __init__(self, palette: palette_py.Palette):
         self.main = np.zeros(8192, dtype=np.uint8)

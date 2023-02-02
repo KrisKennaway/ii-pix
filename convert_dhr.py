@@ -38,7 +38,7 @@ def convert(screen: screen_py.DHGRNTSCScreen, image: Image, args):
         os.path.join(base_dir, "data/rgb24_to_cam16ucs.npy"))
 
     dither = dither_pattern.PATTERNS[args.dither]()
-    bitmap = dither_dhr_pyx.dither_image(
+    bitmap, _ = dither_dhr_pyx.dither_image(
         screen, rgb, dither, args.lookahead, args.verbose, rgb24_to_cam16ucs)
 
     # Show output image by rendering in target palette

@@ -9,6 +9,8 @@ from libc.stdlib cimport malloc, free
 
 cimport common
 
+import screen as screen_py
+
 
 # TODO: use a cdef class
 # C representation of dither_pattern.DitherPattern data, for efficient access.
@@ -75,6 +77,36 @@ cdef inline unsigned char shift_pixel_window(
     return ((last_pixels >> shift_right_by) | shifted_next_pixels) & window_mask
 
 
+# Given a byte to store on the hi-res screen, compute the sequence of 560-resolution pixels that will be displayed.
+# Hi-res graphics works like this:
+# - Each of the low 7 bits in screen_byte results in enabling or disabling two sequential 560-resolution pixels.
+# - pixel screen order is from LSB to MSB
+# - if bit 8 (the "palette bit) is set then the 14-pixel sequence is shifted one position to the right, and the
+#   left-most pixel is filled in by duplicating the right-most pixel controlled by the previous screen byte (i.e. bit 7)
+# - this gives a 15 or 14 pixel sequence depending on whether or not the palette bit is set.
+cdef unsigned int compute_fat_pixels(unsigned int screen_byte, unsigned char last_pixels) nogil:
+    cdef int i, bit, fat_bit
+    cdef unsigned int result = 0
+
+    for i in range(7):
+        bit = (screen_byte >> i) & 0b1
+        fat_bit = bit << 1 | bit
+        result |= (fat_bit) << (2 * i)
+    if screen_byte & 0x80:
+        # Palette bit shifts to the right
+        result <<= 1
+        result |= (last_pixels >> 7)
+
+    return result
+
+
+cdef struct Context:
+    unsigned char bit_lookahead
+    unsigned char pixel_lookahead
+    unsigned char phase_shift
+    unsigned char is_hgr
+
+
 # Look ahead a number of pixels and compute choice for next pixel with lowest total squared error after dithering.
 #
 # Args:
@@ -90,20 +122,20 @@ cdef inline unsigned char shift_pixel_window(
 #
 # Returns: index from 0 .. 2**lookahead into options_nbit representing best available choice for position (x,y)
 #
-cdef int dither_lookahead(Dither* dither, float[:, :, ::1] palette_cam16, float[:, :, ::1] palette_rgb,
-        float[:, :, ::1] image_rgb, int x, int y, int lookahead, unsigned char last_pixels,
-        int x_res, float[:,::1] rgb_to_cam16ucs, unsigned char palette_depth) nogil:
-    cdef int candidate_pixels, i, j
+cdef int dither_lookahead(Dither* dither, unsigned char palette_depth, float[:, :, ::1] palette_cam16,
+        float[:, :, ::1] palette_rgb, float[:, :, ::1] image_rgb, int x, int y, unsigned char last_pixels,
+        int x_res, float[:,::1] rgb_to_cam16ucs, Context context) nogil:
+    cdef int candidate, next_pixels, i, j
     cdef float[3] quant_error
     cdef int best
     cdef float best_error = 2**31-1
     cdef float total_error
-    cdef unsigned char next_pixels
+    cdef unsigned char current_pixels
     cdef int phase
     cdef float[::1] lah_cam16ucs
 
     # Don't bother dithering past the lookahead horizon or edge of screen.
-    cdef int xxr = min(x + lookahead, x_res)
+    cdef int xxr = min(x + context.pixel_lookahead, x_res)
 
     cdef int lah_shape1 = xxr - x
     cdef int lah_shape2 = 3
@@ -114,34 +146,42 @@ cdef int dither_lookahead(Dither* dither, float[:, :, ::1] palette_cam16, float[
     # given pixel (dependent on the state already chosen for pixels to the left), we need to look beyond local minima.
     # i.e. it might be better to make a sub-optimal choice for this pixel if it allows access to much better pixel
     # colours at later positions.
-    for candidate_pixels in range(1 << lookahead):
+    for candidate in range(1 << context.bit_lookahead):
         # Working copy of input pixels
         for i in range(xxr - x):
             for j in range(3):
                 lah_image_rgb[i * lah_shape2 + j] = image_rgb[y, x+i, j]
 
         total_error = 0
+
+        if context.is_hgr:
+            # A HGR screen byte controls 14 or 15 screen pixels
+            next_pixels = compute_fat_pixels(candidate, last_pixels)
+        else:
+            # DHGR pixels are 1:1 with memory bits
+            next_pixels = candidate
+
         # Apply dithering to lookahead horizon or edge of screen
         for i in range(xxr - x):
             xl = dither_bounds_xl(dither, i)
             xr = dither_bounds_xr(dither, xxr - x, i)
-            phase = (x + i) % 4
+            phase = (x + i + context.phase_shift) % 4
 
-            next_pixels = shift_pixel_window(
-                    last_pixels, next_pixels=candidate_pixels, shift_right_by=i+1, window_width=palette_depth)
+            current_pixels = shift_pixel_window(
+                    last_pixels, next_pixels=next_pixels, shift_right_by=i+1, window_width=palette_depth)
 
             # We don't update the input at position x (since we've already chosen fixed outputs), but we do propagate
             # quantization errors to positions >x  so we can compensate for how good/bad these choices were.  i.e. the
-            # next_pixels choices are fixed, but we can still distribute quantization error from having made these
+            # current_pixels choices are fixed, but we can still distribute quantization error from having made these
             # choices, in order to compute the total error.
             for j in range(3):
-                quant_error[j] = lah_image_rgb[i * lah_shape2 + j] - palette_rgb[next_pixels, phase, j]
+                quant_error[j] = lah_image_rgb[i * lah_shape2 + j] - palette_rgb[current_pixels, phase, j]
             apply_one_line(dither, xl, xr, i, lah_image_rgb, lah_shape2, quant_error)
 
             lah_cam16ucs = common.convert_rgb_to_cam16ucs(
                 rgb_to_cam16ucs, lah_image_rgb[i*lah_shape2], lah_image_rgb[i*lah_shape2+1],
                 lah_image_rgb[i*lah_shape2+2])
-            total_error += common.colour_distance_squared(lah_cam16ucs, palette_cam16[next_pixels, phase])
+            total_error += common.colour_distance_squared(lah_cam16ucs, palette_cam16[current_pixels, phase])
 
             if total_error >= best_error:
                 # No need to continue
@@ -149,7 +189,7 @@ cdef int dither_lookahead(Dither* dither, float[:, :, ::1] palette_cam16, float[
 
         if total_error < best_error:
             best_error = total_error
-            best = candidate_pixels
+            best = candidate
 
     free(lah_image_rgb)
     return best
@@ -232,10 +272,9 @@ def dither_image(
         screen, float[:, :, ::1] image_rgb, dither, int lookahead, unsigned char verbose, float[:,::1] rgb_to_cam16ucs):
     cdef int y, x
     cdef unsigned char i, j, pixels_nbit, phase
-    # cdef float[3] input_pixel_rgb
     cdef float[3] quant_error
     cdef unsigned char output_pixel_nbit
-    cdef unsigned char best_next_pixels
+    cdef unsigned int next_pixels
     cdef float[3] output_pixel_rgb
 
     # Hoist some python attribute accesses into C variables for efficient access during the main loop
@@ -273,22 +312,52 @@ def dither_image(
     # dot positions are used to determine the colour of a given pixel.
     cdef (unsigned char)[:, ::1] image_nbit = np.empty((image_rgb.shape[0], image_rgb.shape[1]), dtype=np.uint8)
 
+    cdef Context context
+    if screen.MODE == screen_py.Mode.HI_RES:
+        context.is_hgr = 1
+        context.bit_lookahead = 8
+        context.pixel_lookahead = 15
+        # HGR and DHGR have a timing phase shift which rotates the effective mappings from screen dots to colours
+        context.phase_shift = 3
+    else:
+        context.is_hgr = 0
+        context.bit_lookahead = lookahead
+        context.pixel_lookahead = lookahead
+        context.phase_shift = 0
+
+    cdef (unsigned char)[:, ::1] linear_bytemap = np.zeros((192, 40), dtype=np.uint8)
+
+    # After performing lookahead, move ahead this many pixels at once.
+    cdef int apply_batch_size
+    if context.is_hgr:
+        # For HGR we have to apply an entire screen byte at a time, which controls 14 or 15 pixels (see
+        # compute_fat_pixels above).  This is because the high bit shifts this entire group of 14 pixels at once,
+        # so we have to make a single decision about whether or not to enable it.
+        apply_batch_size = 14
+    else:
+        # For DHGR we can choose each pixel state independently, so we get better results if we apply one pixel at
+        # a time.
+        apply_batch_size = 1
+
     for y in range(yres):
         if verbose:
             print("%d/%d" % (y, yres))
         output_pixel_nbit = 0
         for x in range(xres):
-            # Compute all possible 2**N choices of n-bit pixel colours for positions x .. x + lookahead
-            # lookahead_palette_choices_nbit = lookahead_options(lookahead, output_pixel_nbit)
-            # Apply error diffusion for each of these 2**N choices, and compute which produces the closest match
-            # to the source image over the succeeding N pixels
-            best_next_pixels = dither_lookahead(
-                    &cdither, palette_cam16, palette_rgb, image_rgb, x, y, lookahead, output_pixel_nbit, xres,
-                    rgb_to_cam16ucs, palette_depth)
+            if x % apply_batch_size == 0:
+                # Compute all possible 2**N choices of n-bit pixel colours for positions x .. x + lookahead
+                # Apply error diffusion for each of these 2**N choices, and compute which produces the closest match
+                # to the source image over the succeeding N pixels
+                next_pixels = dither_lookahead(
+                        &cdither, palette_depth, palette_cam16, palette_rgb, image_rgb, x, y, output_pixel_nbit, xres,
+                        rgb_to_cam16ucs, context)
+                if context.is_hgr:
+                    linear_bytemap[y, x // 14] = next_pixels
+                    next_pixels = compute_fat_pixels(next_pixels, output_pixel_nbit)
+
             # Apply best choice for next 1 pixel
             output_pixel_nbit = shift_pixel_window(
-                    output_pixel_nbit, best_next_pixels, shift_right_by=1, window_width=palette_depth)
-
+                    output_pixel_nbit, next_pixels, shift_right_by=x % apply_batch_size + 1, window_width=palette_depth)
             # Apply error diffusion from chosen output pixel value
             for i in range(3):
                 output_pixel_rgb[i] = palette_rgb[output_pixel_nbit, x % 4, i]
@@ -301,4 +370,4 @@ def dither_image(
                 image_rgb[y, x, i] = output_pixel_rgb[i]
 
     free(cdither.pattern)
-    return image_nbit_to_bitmap(image_nbit, xres, yres, palette_depth)
+    return image_nbit_to_bitmap(image_nbit, xres, yres, palette_depth), linear_bytemap

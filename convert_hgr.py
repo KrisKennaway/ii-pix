@@ -3,7 +3,7 @@ import os.path
 from PIL import Image
 import numpy as np
 
-import dither_hgr as dither_hgr_pyx
+import dither_dhr as dither_dhr_pyx
 import dither_pattern
 import palette as palette_py
 import screen as screen_py
@@ -37,7 +37,7 @@ def convert(screen: screen_py.HGRScreen, image: Image, args):
         os.path.join(base_dir, "data/rgb24_to_cam16ucs.npy"))
 
     dither = dither_pattern.PATTERNS[args.dither]()
-    bitmap, linear_bytemap = dither_hgr_pyx.dither_image(
+    bitmap, linear_bytemap = dither_dhr_pyx.dither_image(
         screen, rgb, dither, 8, args.verbose, rgb24_to_cam16ucs)
 
     # Show output image by rendering in target palette
