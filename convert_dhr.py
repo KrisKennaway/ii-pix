@@ -28,6 +28,7 @@ def _write(screen: screen_py.DHGRScreen, bitmap: np.ndarray, args):
         f.write(bytes(screen.main))
 
 
+# TODO: unify with convert_hgr.convert()
 def convert(screen: screen_py.DHGRNTSCScreen, image: Image, args):
     rgb = np.array(image).astype(np.float32) / 255
 

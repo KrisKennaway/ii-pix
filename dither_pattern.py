@@ -7,6 +7,9 @@ class DitherPattern:
     PATTERN = None
     ORIGIN = None
 
+    def __init__(self, error_fraction=1.0):
+        self.PATTERN *= error_fraction
+
 
 class NoDither(DitherPattern):
     """No dithering."""
@@ -76,15 +79,6 @@ class JarvisModifiedDither(DitherPattern):
     PATTERN /= np.sum(PATTERN)
     ORIGIN = (0, 2)
 
-class KrisDither(DitherPattern):
-    """Default dither from bmp2dhr."""
-
-    # 0 * 7
-    # 3 5 1
-    PATTERN = np.array(((0, 0, 7), (3, 5, 1)),
-                       dtype=np.float32).reshape(2, 3) / np.float32(24)
-    ORIGIN = (0, 1)
-
 
 PATTERNS = {
     'floyd': FloydSteinbergDither,
@@ -94,8 +88,6 @@ PATTERNS = {
     'jarvis': JarvisDither,
     'jarvis-mod': JarvisModifiedDither,
     'none': NoDither,
-    'kris': KrisDither,
-
 }
 
 DEFAULT_PATTERN = 'floyd'
