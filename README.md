@@ -1,6 +1,6 @@
 # ][-pix 2.1
 
-][-pix is an image conversion utility targeting Apple II graphics modes, currently Double Hi-Res
+][-pix is an image conversion utility targeting Apple II graphics modes, currently Hi-Res (all models), Double Hi-Res
 (enhanced //e, //c, //gs) and Super Hi-Res (//gs).
 
 ## Installation
@@ -39,7 +39,11 @@ To convert an image, the basic command is:
 python convert.py <mode> [<flags>] <input> <output>
 ```
 where
-* `mode` is `dhr` for Double Hi-Res Colour (560x192), `dhr_mono` for Double Hi-Res Mono (560x192), or `shr` for Super Hi-Res (320x200)
+* `mode` is one of the following:
+    * `hgr` for Hi-Res Colour (560x192 but only half of the horizontal pixels may be independently controlled) 
+    * `dhr` for Double Hi-Res Colour (560x192)
+    * `dhr_mono` for Double Hi-Res Mono (560x192)
+    * `shr` for Super Hi-Res (320x200)
 * `input` is the source image file to convert (e.g. `my-image.jpg`)
 * `output` is the output filename to produce (e.g. `my-image.dhr`)
 
@@ -51,7 +55,23 @@ The following flags are supported in all modes:
 * `--verbose` Show progress during conversion (default: False)
 * `--gamma-correct` Gamma-correct image by this value (default: 2.4)
 
-See below for DHR- and SHR- specific instructions.
+For other available options, use `python convert.py <mode> --help`
+
+See below for mode-specific instructions.
+
+## Hi-Res
+
+To convert an image to Hi-Res the simplest usage is:
+
+```buildoutcfg
+python convert.py hgr --palette ntsc <input> <output.hgr>
+```
+
+`<output.hgr>` contains the hires image data in a form suitable for transfer to an Apple II disk image.
+
+TODO: document flags
+
+TODO: add more details about HGR - resolution and colour model.
 
 ## Double Hi-Res
 
@@ -64,8 +84,6 @@ python convert.py dhr --palette ntsc <input> <output.dhr>
 `<output.dhr>` contains the double-hires image data in a form suitable for transfer to an Apple II disk image.  The 16k output consists of 8k AUX data first, 8K MAIN data second (this matches the output format of other DHGR image converters).  i.e. if loaded at 0x2000, the contents of 0x2000..0x3fff should be moved to 0x4000..0x5fff in AUX memory, and the image can be viewed on DHGR page 2.
 
 By default, a preview image will be shown after conversion, and saved as `<output>-preview.png`
-
-For other available options, use `python convert.py --help`
 
 TODO: document flags
 
@@ -88,6 +106,27 @@ supported for `shr` conversions:
 TODO: link to KansasFest 2022 talk slides/video for more details
 
 # Examples
+
+## Hi-Res
+
+This image was generated using
+
+```buildoutcfg
+python convert.py hgr examples/hgr/mandarin-duck.jpg examples/hgr/mandarin-duck.bin
+```
+The image on the right is a screenshot taken from OpenEmulator.
+
+| ![Mandarin duck](examples/hgr/mandarin-duck.jpg) | ![Mandarin duck](examples/hgr/mandarin-duck-openemulator.png) |
+|--------------------------------------------------|---------------------------------------------------------------|
+
+(Source: [Adrian Pingstone](https://commons.wikimedia.org/wiki/File:Mandarin.duck.arp.jpg), public domain, via Wikimedia Commons)
+
+| ![Portrait](examples/hgr/portrait.jpg) | ![Portrait](examples/hgr/portrait-openemulator.png) |
+|---|---|
+
+(Source: [Devanath](https://www.pikist.com/free-photo-srmda/fr), public domain)
+
+TODO: add more hi-res images
 
 ## Double Hi-Res
 
@@ -150,13 +189,15 @@ python convert.py shr examples/shr/rabbit-kitten-original.png examples/shr/rabbi
 
 * Supporting lo-res and double lo-res graphics modes, and super hi-res 3200 modes would be straightforward.
 
-* Hi-res will require more care, since the 560 pixel display is not individually dot addressible.  In particular the behaviour of the "palette bit" (which shifts a group of 7 dots to the right by 1) is another optimization constraint.  In practise a similar lookahead algorithm should work well though.
-
 * Super hi-res 640 mode would also likely require some investigation, since it is a more highly constrained optimization problem than 320 mode.
 
 * I would like to be able to find an ordered dithering algorithm that works well for Apple II graphics.  Ordered dithering specifically avoids diffusing errors arbitrarily across the image, which produces visual noise (and unnecessary deltas) when combined with animation.  For example such a thing may work well with my [II-Vision](https://github.com/KrisKennaway/ii-vision) video streamer.  However the properties of NTSC artifact colour seem to be in conflict with these requirements, i.e. pixel changes *always* propagate colour to some extent.
 
 # Version history
+
+## v2.2 (2023-02-03)
+
+* Added support for HGR colour conversions
 
 ## v2.1 (2023-01-21)
 
