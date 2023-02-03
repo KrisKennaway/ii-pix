@@ -40,7 +40,7 @@ python convert.py <mode> [<flags>] <input> <output>
 ```
 where
 * `mode` is one of the following:
-    * `hgr` for Hi-Res Colour (560x192 but only half of the horizontal pixels may be independently controlled) 
+    * `hgr` for Hi-Res Colour (560x192 but only half of the horizontal pixels may be independently controlled)
     * `dhr` for Double Hi-Res Colour (560x192)
     * `dhr_mono` for Double Hi-Res Mono (560x192)
     * `shr` for Super Hi-Res (320x200)
@@ -64,7 +64,7 @@ See below for mode-specific instructions.
 To convert an image to Hi-Res the simplest usage is:
 
 ```buildoutcfg
-python convert.py hgr --palette ntsc <input> <output.hgr>
+python convert.py hgr <input> <output.hgr>
 ```
 
 `<output.hgr>` contains the hires image data in a form suitable for transfer to an Apple II disk image.
