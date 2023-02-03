@@ -222,6 +222,7 @@ class NTSCScreen:
                     ), x % 4]
         return image_rgb
 
+
 class DHGRNTSCScreen(DHGRScreen, NTSCScreen):
     def __init__(self, palette: palette_py.Palette):
         self.palette = palette
@@ -230,7 +231,20 @@ class DHGRNTSCScreen(DHGRScreen, NTSCScreen):
     NTSC_PHASE_SHIFT = 0
 
 
-class HGRScreen(NTSCScreen):
+class HGRNTSCScreen(NTSCScreen):
+    # Hi-Res really is 560 pixels horizontally, not 280 - but unlike DHGR
+    # you can only independently control about half of the pixels.
+    #
+    # In more detail, hi-res graphics works like this:
+    # - Each of the low 7 bits in a byte of screen memory results in
+    #   enabling or disabling two sequential 560-resolution pixels.
+    # - pixel screen order is from LSB to MSB
+    # - if bit 8 (the "palette bit") is set then the 14-pixel sequence is
+    #   shifted one position to the right, and the left-most pixel is filled
+    #   in by duplicating the right-most pixel produced by the previous
+    #   screen byte (i.e. bit 7)
+    # - thus each byte produces a 15 or 14 pixel sequence depending on
+    #   whether or not the palette bit is set.
     X_RES = 560
     Y_RES = 192
 
@@ -241,7 +255,7 @@ class HGRScreen(NTSCScreen):
     def __init__(self, palette: palette_py.Palette):
         self.main = np.zeros(8192, dtype=np.uint8)
         self.palette = palette
-        super(HGRScreen, self).__init__()
+        super(HGRNTSCScreen, self).__init__()
 
     def pack_bytes(self, linear_bytemap: np.ndarray):
         """Packs an image into memory format (8K main)."""

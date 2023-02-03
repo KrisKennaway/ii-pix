@@ -21,14 +21,14 @@ def _output(out_image: Image, args):
         out_image.save(outfile, "PNG")
 
 
-def _write(screen: screen_py.HGRScreen, linear_bytemap: np.ndarray, args):
+def _write(screen: screen_py.HGRNTSCScreen, linear_bytemap: np.ndarray, args):
     screen.pack_bytes(linear_bytemap)
     with open(args.output, "wb") as f:
         f.write(bytes(screen.main))
 
 
 # TODO: unify with convert_dhr.convert()
-def convert(screen: screen_py.HGRScreen, image: Image, args):
+def convert(screen: screen_py.HGRNTSCScreen, image: Image, args):
     rgb = np.array(image).astype(np.float32) / 255
 
     # Conversion matrix from RGB to CAM16UCS colour values.  Indexed by
@@ -45,7 +45,7 @@ def convert(screen: screen_py.HGRScreen, image: Image, args):
     # Show output image by rendering in target palette
     output_palette_name = args.show_palette or args.palette
     output_palette = palette_py.PALETTES[output_palette_name]()
-    output_screen = screen_py.HGRScreen(output_palette)
+    output_screen = screen_py.HGRNTSCScreen(output_palette)
     if output_palette_name == "ntsc":
         output_srgb = output_screen.bitmap_to_image_ntsc(bitmap)
     else:

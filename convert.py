@@ -140,7 +140,7 @@ def prepare_image(image_filename: str, show_input: bool, screen,
 
 def convert_hgr(args):
     palette = palette_py.PALETTES[args.palette]()
-    screen = screen_py.HGRScreen(palette)
+    screen = screen_py.HGRNTSCScreen(palette)
     image = prepare_image(args.input, args.show_input, screen,
                           args.gamma_correct)
     convert_hgr_py.convert(screen, image, args)
