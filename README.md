@@ -1,4 +1,4 @@
-# ][-pix 2.1
+# ][-pix 2.2
 
 ][-pix is an image conversion utility targeting Apple II graphics modes, currently Hi-Res (all models), Double Hi-Res
 (enhanced //e, //c, //gs) and Super Hi-Res (//gs).
