@@ -79,16 +79,7 @@ class SHR320Screen:
         self.memory = dump
 
 
-class DHGRScreen:
-    X_RES = 560
-    Y_RES = 192
-
-    MODE = Mode.DOUBLE_HI_RES
-
-    def __init__(self):
-        self.main = np.zeros(8192, dtype=np.uint8)
-        self.aux = np.zeros(8192, dtype=np.uint8)
-
+class BaseDHGRScreen:
     @staticmethod
     def y_to_base_addr(y: int) -> int:
         """Maps y coordinate to screen memory base address."""
@@ -98,6 +89,17 @@ class DHGRScreen:
         c = d - 8 * b
 
         return 1024 * c + 128 * b + 40 * a
+
+
+class DHGRScreen(BaseDHGRScreen):
+    X_RES = 560
+    Y_RES = 192
+
+    MODE = Mode.DOUBLE_HI_RES
+
+    def __init__(self):
+        self.main = np.zeros(8192, dtype=np.uint8)
+        self.aux = np.zeros(8192, dtype=np.uint8)
 
     def pack(self, bitmap: np.ndarray):
         """Packs an image into memory format (8k AUX + 8K MAIN)."""
@@ -231,7 +233,7 @@ class DHGRNTSCScreen(DHGRScreen, NTSCScreen):
     NTSC_PHASE_SHIFT = 0
 
 
-class HGRNTSCScreen(NTSCScreen):
+class HGRNTSCScreen(BaseDHGRScreen, NTSCScreen):
     # Hi-Res really is 560 pixels horizontally, not 280 - but unlike DHGR
     # you can only independently control about half of the pixels.
     #
