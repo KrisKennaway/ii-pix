@@ -7,6 +7,9 @@ class DitherPattern:
     PATTERN = None
     ORIGIN = None
 
+    def __init__(self, error_fraction=1.0):
+        self.PATTERN *= error_fraction
+
 
 class NoDither(DitherPattern):
     """No dithering."""
@@ -84,7 +87,7 @@ PATTERNS = {
     'buckels': BuckelsDither,
     'jarvis': JarvisDither,
     'jarvis-mod': JarvisModifiedDither,
-    'none': NoDither
+    'none': NoDither,
 }
 
 DEFAULT_PATTERN = 'floyd'

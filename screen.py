@@ -1,13 +1,25 @@
 """Representation of Apple II screen memory."""
 
-import math
+from enum import Enum
 import numpy as np
 import palette as palette_py
+
+
+class Mode(Enum):
+    LO_RES = 1
+    DOUBLE_LO_RES = 2
+    HI_RES = 3
+    DOUBLE_HI_RES = 4
+    SUPER_HI_RES_320 = 5
+    SUPER_HI_RES_640 = 6
+    SUPER_HI_RES_3200 = 7
 
 
 class SHR320Screen:
     X_RES = 320
     Y_RES = 200
+
+    MODE = Mode.SUPER_HI_RES_320
 
     def __init__(self):
         self.palettes = {k: np.zeros((16, 3), dtype=np.uint8) for k in
@@ -67,14 +79,7 @@ class SHR320Screen:
         self.memory = dump
 
 
-class DHGRScreen:
-    X_RES = 560
-    Y_RES = 192
-
-    def __init__(self):
-        self.main = np.zeros(8192, dtype=np.uint8)
-        self.aux = np.zeros(8192, dtype=np.uint8)
-
+class BaseDHGRScreen:
     @staticmethod
     def y_to_base_addr(y: int) -> int:
         """Maps y coordinate to screen memory base address."""
@@ -84,6 +89,17 @@ class DHGRScreen:
         c = d - 8 * b
 
         return 1024 * c + 128 * b + 40 * a
+
+
+class DHGRScreen(BaseDHGRScreen):
+    X_RES = 560
+    Y_RES = 192
+
+    MODE = Mode.DOUBLE_HI_RES
+
+    def __init__(self):
+        self.main = np.zeros(8192, dtype=np.uint8)
+        self.aux = np.zeros(8192, dtype=np.uint8)
 
     def pack(self, bitmap: np.ndarray):
         """Packs an image into memory format (8k AUX + 8K MAIN)."""
@@ -111,36 +127,16 @@ class DHGRScreen:
             self.main[addr:addr + 40] = main_col[y, :]
         return
 
-class DHGRNTSCScreen(DHGRScreen):
-    def __init__(self, palette: palette_py.Palette):
-        self.palette = palette
-        super(DHGRNTSCScreen, self).__init__()
 
-    def bitmap_to_image_rgb(self, bitmap: np.ndarray) -> np.ndarray:
-        """Convert our 2-bit bitmap image into a RGB image.
+class NTSCScreen:
+    NTSC_PHASE_SHIFT = None
 
-        Colour at every pixel is determined by the value of an n-bit sliding
-        window and x % 4, which give the index into our RGB palette.
-        """
-        image_rgb = np.empty((self.Y_RES, self.X_RES, 3), dtype=np.uint8)
-        for y in range(self.Y_RES):
-            bitmap_window = [False] * self.palette.PALETTE_DEPTH
-            for x in range(self.X_RES):
-                # Maintain a sliding window of pixels of width PALETTE_DEPTH
-                bitmap_window = bitmap_window[1:] + [bitmap[y, x]]
-                image_rgb[y, x, :] = self.palette.RGB[
-                    self.palette.bitmap_to_idx(
-                        np.array(bitmap_window, dtype=bool)), x % 4]
-        return image_rgb
-
-    @staticmethod
-    def _sin(pos, phase0=0):
-        x = pos % 12 + phase0
+    def _sin(self, pos):
+        x = pos % 12 + self.NTSC_PHASE_SHIFT * 3
         return np.sin(x * 2 * np.pi / 12)
 
-    @staticmethod
-    def _cos(pos, phase0=0):
-        x = pos % 12 + phase0
+    def _cos(self, pos):
+        x = pos % 12 + self.NTSC_PHASE_SHIFT * 3
         return np.cos(x * 2 * np.pi / 12)
 
     def _read(self, line, pos):
@@ -203,3 +199,70 @@ class DHGRNTSCScreen(DHGRScreen):
                 out_rgb[y, x, :] = (r, g, b)
 
         return out_rgb
+
+    def bitmap_to_image_rgb(self, bitmap: np.ndarray) -> np.ndarray:
+        """Convert our 2-bit bitmap image into a RGB image.
+
+        Colour at every pixel is determined by the value of an n-bit sliding
+        window and x % 4, which give the index into our RGB palette.
+        """
+        image_rgb = np.empty((self.Y_RES, self.X_RES, 3), dtype=np.uint8)
+        for y in range(self.Y_RES):
+            bitmap_window = [False] * self.palette.PALETTE_DEPTH
+            for x in range(self.X_RES):
+                # Maintain a sliding window of pixels of width PALETTE_DEPTH
+                bitmap_window = bitmap_window[1:] + [bitmap[y, x]]
+
+                image_rgb[y, x, :] = self.palette.RGB[
+                    self.palette.bitmap_to_idx(
+                        # Mapping from bit pattern to colour is rotated by
+                        # NTSC phase shift
+                        np.roll(
+                            np.array(bitmap_window, dtype=bool),
+                            self.NTSC_PHASE_SHIFT
+                        )
+                    ), x % 4]
+        return image_rgb
+
+
+class DHGRNTSCScreen(DHGRScreen, NTSCScreen):
+    def __init__(self, palette: palette_py.Palette):
+        self.palette = palette
+        super(DHGRNTSCScreen, self).__init__()
+
+    NTSC_PHASE_SHIFT = 0
+
+
+class HGRNTSCScreen(BaseDHGRScreen, NTSCScreen):
+    # Hi-Res really is 560 pixels horizontally, not 280 - but unlike DHGR
+    # you can only independently control about half of the pixels.
+    #
+    # In more detail, hi-res graphics works like this:
+    # - Each of the low 7 bits in a byte of screen memory results in
+    #   enabling or disabling two sequential 560-resolution pixels.
+    # - pixel screen order is from LSB to MSB
+    # - if bit 8 (the "palette bit") is set then the 14-pixel sequence is
+    #   shifted one position to the right, and the left-most pixel is filled
+    #   in by duplicating the right-most pixel produced by the previous
+    #   screen byte (i.e. bit 7)
+    # - thus each byte produces a 15 or 14 pixel sequence depending on
+    #   whether or not the palette bit is set.
+    X_RES = 560
+    Y_RES = 192
+
+    MODE = Mode.HI_RES
+
+    NTSC_PHASE_SHIFT = 3
+
+    def __init__(self, palette: palette_py.Palette):
+        self.main = np.zeros(8192, dtype=np.uint8)
+        self.palette = palette
+        super(HGRNTSCScreen, self).__init__()
+
+    def pack_bytes(self, linear_bytemap: np.ndarray):
+        """Packs an image into memory format (8K main)."""
+
+        for y in range(self.Y_RES):
+            addr = self.y_to_base_addr(y)
+            self.main[addr:addr + 40] = linear_bytemap[y, :]
+        return

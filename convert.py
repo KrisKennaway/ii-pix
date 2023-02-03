@@ -3,6 +3,7 @@
 import argparse
 import numpy as np
 
+import convert_hgr as convert_hgr_py
 import convert_dhr as convert_dhr_py
 import convert_shr as convert_shr_py
 import dither_pattern
@@ -43,32 +44,13 @@ def add_common_args(parser):
     )
 
 
-def main():
-    parser = argparse.ArgumentParser()
-    subparsers = parser.add_subparsers(required=True)
-
-    dhr_parser = subparsers.add_parser("dhr")
-    add_common_args(dhr_parser)
-
-    def validate_lookahead(arg: int) -> int:
-        try:
-            int_arg = int(arg)
-        except Exception:
-            raise argparse.ArgumentTypeError("--lookahead must be an integer")
-        if int_arg < 1:
-            raise argparse.ArgumentTypeError("--lookahead must be at least 1")
-        return int_arg
-
-    dhr_parser.add_argument(
-        "--lookahead", type=validate_lookahead, default=8,
-        help=("How many pixels to look ahead to compensate for NTSC colour "
-              "artifacts (default: 8)"))
-    dhr_parser.add_argument(
+def add_dhr_hgr_args(parser):
+    parser.add_argument(
         '--dither', type=str, choices=list(dither_pattern.PATTERNS.keys()),
         default=dither_pattern.DEFAULT_PATTERN,
         help="Error distribution pattern to apply when dithering (default: "
              + dither_pattern.DEFAULT_PATTERN + ")")
-    dhr_parser.add_argument(
+    parser.add_argument(
         '--palette', type=str, choices=list(set(palette_py.PALETTES.keys())),
         default=palette_py.DEFAULT_PALETTE,
         help='RGB colour palette to dither to.  "ntsc" blends colours over 8 '
@@ -76,16 +58,53 @@ def main():
              'use/emulate NTSC, but can be substantially slower.  Other '
              'palettes determine colours based on 4 pixel sequences '
              '(default: ' + palette_py.DEFAULT_PALETTE + ")")
-    dhr_parser.add_argument(
+    parser.add_argument(
         '--show-palette', type=str, choices=list(palette_py.PALETTES.keys()),
         help="RGB colour palette to use when --show_output (default: "
              "value of --palette)")
+
+
+def validate_lookahead(arg: int) -> int:
+    try:
+        int_arg = int(arg)
+    except Exception:
+        raise argparse.ArgumentTypeError("--lookahead must be an integer")
+    if int_arg < 1:
+        raise argparse.ArgumentTypeError("--lookahead must be at least 1")
+    return int_arg
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    subparsers = parser.add_subparsers(required=True)
+
+    # Hi-res
+    hgr_parser = subparsers.add_parser("hgr")
+    add_common_args(hgr_parser)
+    add_dhr_hgr_args(hgr_parser)
+    hgr_parser.add_argument(
+        '--error_fraction', type=float, default = 0.7,
+        help="Fraction of quantization error to distribute to neighbouring "
+             "pixels according to dither pattern"
+    )
+    hgr_parser.set_defaults(func=convert_hgr)
+
+    # Double Hi-res
+    dhr_parser = subparsers.add_parser("dhr")
+    add_common_args(dhr_parser)
+    add_dhr_hgr_args(dhr_parser)
+    dhr_parser.add_argument(
+        "--lookahead", type=validate_lookahead, default=8,
+        help=("How many pixels to look ahead to compensate for NTSC colour "
+              "artifacts (default: 8)"))
     dhr_parser.set_defaults(func=convert_dhr)
 
+    # Double Hi-Res mono
     dhr_mono_parser = subparsers.add_parser("dhr_mono")
     add_common_args(dhr_mono_parser)
     dhr_mono_parser.set_defaults(func=convert_dhr_mono)
 
+    # Super Hi-Res 320x200
     shr_parser = subparsers.add_parser("shr")
     add_common_args(shr_parser)
     shr_parser.add_argument(
@@ -117,6 +136,14 @@ def prepare_image(image_filename: str, show_input: bool, screen,
                         srgb_output=True).show()
     return image_py.resize(image, screen.X_RES, screen.Y_RES,
                            gamma=gamma_correct)
+
+
+def convert_hgr(args):
+    palette = palette_py.PALETTES[args.palette]()
+    screen = screen_py.HGRNTSCScreen(palette)
+    image = prepare_image(args.input, args.show_input, screen,
+                          args.gamma_correct)
+    convert_hgr_py.convert(screen, image, args)
 
 
 def convert_dhr(args):
