@@ -139,10 +139,10 @@ class NTSCScreen:
         x = pos % 12 + self.NTSC_PHASE_SHIFT * 3
         return np.cos(x * 2 * np.pi / 12)
 
-    def _read(self, line, pos):
+    def _read(self, lines, pos):
         if pos < 0:
-            return 0
-        return 1 if line[pos] else 0
+            return np.zeros(lines.shape[0], dtype=np.float32)
+        return lines[:, pos].astype(np.float32)
 
     def bitmap_to_image_ntsc(self, bitmap: np.ndarray) -> np.ndarray:
         y_width = 12
@@ -177,26 +177,30 @@ class NTSCScreen:
 
         out_rgb = np.empty((bitmap.shape[0], bitmap.shape[1] * 3, 3),
                            dtype=np.uint8)
-        for y in range(bitmap.shape[0]):
-            ysum = 0
-            usum = 0
-            vsum = 0
-            line = np.repeat(bitmap[y], 3)
+        ysum = np.zeros(bitmap.shape[0], dtype=np.float32)
+        usum = np.zeros(bitmap.shape[0], dtype=np.float32)
+        vsum = np.zeros(bitmap.shape[0], dtype=np.float32)
 
-            for x in range(bitmap.shape[1] * 3):
-                ysum += self._read(line, x) - self._read(line, x - y_width)
-                usum += self._read(line, x) * self._sin(x) - self._read(
-                    line, x - u_width) * self._sin((x - u_width))
-                vsum += self._read(line, x) * self._cos(x) - self._read(
-                    line, x - v_width) * self._cos((x - v_width))
-                rgb = np.matmul(
-                    yuv_to_rgb, np.array(
-                        (ysum / y_width, usum / u_width,
-                         vsum / v_width)).reshape((3, 1))).reshape(3)
-                r = min(255, max(0, rgb[0] * 255))
-                g = min(255, max(0, rgb[1] * 255))
-                b = min(255, max(0, rgb[2] * 255))
-                out_rgb[y, x, :] = (r, g, b)
+        # Repeat each pixel 3 times so we can do sub-pixel colour sampling
+        lines = np.repeat(bitmap, 3, axis=1)
+
+        for x in range(bitmap.shape[1] * 3):
+            ysum += self._read(lines, x) - self._read(lines, x - y_width)
+            usum += self._read(lines, x) * self._sin(x) - self._read(
+                lines, x - u_width) * self._sin((x - u_width))
+            vsum += self._read(lines, x) * self._cos(x) - self._read(
+                lines, x - v_width) * self._cos((x - v_width))
+
+            rgb = np.matmul(
+                yuv_to_rgb, np.stack(
+                    (ysum / y_width, usum / u_width,
+                     vsum / v_width), axis=1).reshape(
+                    (bitmap.shape[0], 3, 1))).reshape(
+                    bitmap.shape[0], 3)
+            out_rgb[:, x, 0] = np.minimum(255, np.maximum(0, rgb[:, 0] * 255))
+            out_rgb[:, x, 1] = np.minimum(255, np.maximum(0, rgb[:, 1] * 255))
+            out_rgb[:, x, 2] = np.minimum(255, np.maximum(0, rgb[:, 2] * 255))
+
 
         return out_rgb
 

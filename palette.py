@@ -41,12 +41,19 @@ class Palette:
 
     def __init__(self):
         self.RGB = {}
-        for k, v in self.SRGB.items():
+
+        # Do a bulk conversion because it's much faster than doing it within the
+        # loop
+        srgb = np.stack(list(self.SRGB.values()))
+        with colour.utilities.suppress_warnings(colour_usage_warnings=True):
+            cam = colour.convert(srgb / 255, "sRGB", "CAM16UCS").astype(
+                np.float32)
+
+        for i, kv in enumerate(self.SRGB.items()):
+            k, v = kv
             self.RGB[k] = (np.clip(image.srgb_to_linear_array(v / 255), 0.0,
                                    1.0) * 255).astype(np.uint8)
-            with colour.utilities.suppress_warnings(colour_usage_warnings=True):
-                self.CAM16UCS[k] = colour.convert(
-                    v / 255, "sRGB", "CAM16UCS").astype(np.float32)
+            self.CAM16UCS[k] = cam[i, :]
 
     @staticmethod
     def _pixel_phase_shifts(phase_3_srgb):
