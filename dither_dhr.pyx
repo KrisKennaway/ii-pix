@@ -24,21 +24,21 @@ cdef struct Dither:
 
 
 # Compute left-hand bounding box for dithering at horizontal position x.
-cdef int dither_bounds_xl(Dither *dither, int x) nogil:
+cdef inline int dither_bounds_xl(Dither *dither, int x) nogil:
     cdef int el = max(dither.x_origin - x, 0)
     cdef int xl = x - dither.x_origin + el
     return xl
 
 
 #Compute right-hand bounding box for dithering at horizontal position x.
-cdef int dither_bounds_xr(Dither *dither, int x_res, int x) nogil:
+cdef inline int dither_bounds_xr(Dither *dither, int x_res, int x) nogil:
     cdef int er = min(dither.x_shape, x_res - x)
     cdef int xr = x - dither.x_origin + er
     return xr
 
 
 # Compute upper bounding box for dithering at vertical position y.
-cdef int dither_bounds_yt(Dither *dither, int y) nogil:
+cdef inline int dither_bounds_yt(Dither *dither, int y) nogil:
     cdef int et = max(dither.y_origin - y, 0)
     cdef int yt = y - dither.y_origin + et
 
@@ -46,7 +46,7 @@ cdef int dither_bounds_yt(Dither *dither, int y) nogil:
 
 
 # Compute lower bounding box for dithering at vertical position y.
-cdef int dither_bounds_yb(Dither *dither, int y_res, int y) nogil:
+cdef inline int dither_bounds_yb(Dither *dither, int y_res, int y) nogil:
     cdef int eb = min(dither.y_shape, y_res - y)
     cdef int yb = y - dither.y_origin + eb
     return yb
@@ -128,6 +128,7 @@ cdef struct Context:
 #
 # Returns: index from 0 .. 2**lookahead into options_nbit representing best available choice for position (x,y)
 #
+@cython.cdivision(True)
 cdef int dither_lookahead(Dither* dither, unsigned char palette_depth, float[:, :, ::1] palette_cam16,
         float[:, :, ::1] palette_rgb, float[:, :, ::1] image_rgb, int x, int y, unsigned char last_pixels,
         int x_res, float[:,::1] rgb_to_cam16ucs, Context context) nogil:
@@ -138,13 +139,15 @@ cdef int dither_lookahead(Dither* dither, unsigned char palette_depth, float[:, 
     cdef float total_error
     cdef unsigned char current_pixels
     cdef int phase
-    cdef float[::1] lah_cam16ucs
+    cdef common.float3 lah_cam16ucs
+    cdef float[3] cam
 
     # Don't bother dithering past the lookahead horizon or edge of screen.
     cdef int xxr = min(x + context.pixel_lookahead, x_res)
 
     cdef int lah_shape1 = xxr - x
     cdef int lah_shape2 = 3
+    # TODO: try again with memoryview - does it actually have overhead here?
     cdef float *lah_image_rgb = <float *> malloc(lah_shape1 * lah_shape2 * sizeof(float))
 
     # For each 2**lookahead possibilities for the on/off state of the next lookahead pixels, apply error diffusion
@@ -184,10 +187,13 @@ cdef int dither_lookahead(Dither* dither, unsigned char palette_depth, float[:, 
                 quant_error[j] = lah_image_rgb[i * lah_shape2 + j] - palette_rgb[current_pixels, phase, j]
             apply_one_line(dither, xl, xr, i, lah_image_rgb, lah_shape2, quant_error)
 
+            # Accumulate error distance from pixel colour to target colour in CAM16UCS colour space
             lah_cam16ucs = common.convert_rgb_to_cam16ucs(
                 rgb_to_cam16ucs, lah_image_rgb[i*lah_shape2], lah_image_rgb[i*lah_shape2+1],
                 lah_image_rgb[i*lah_shape2+2])
-            total_error += common.colour_distance_squared(lah_cam16ucs, palette_cam16[current_pixels, phase])
+            for j in range(3):
+                cam[j] = palette_cam16[current_pixels, phase, j]
+            total_error += common.colour_distance_squared(lah_cam16ucs.data, cam)
 
             if total_error >= best_error:
                 # No need to continue
@@ -212,7 +218,7 @@ cdef int dither_lookahead(Dither* dither, unsigned char palette_depth, float[:, 
 #     image_shape1: horizontal dimension of image
 #     quant_error: RGB quantization error to be diffused
 #
-cdef void apply_one_line(Dither* dither, int xl, int xr, int x, float[] image, int image_shape1,
+cdef inline void apply_one_line(Dither* dither, int xl, int xr, int x, float[] image, int image_shape1,
         float[] quant_error) nogil:
 
     cdef int i, j
@@ -274,8 +280,9 @@ cdef image_nbit_to_bitmap(
 #
 # Returns: tuple of n-bit output image array and RGB output image array
 #
+@cython.cdivision(True)
 def dither_image(
-        screen, float[:, :, ::1] image_rgb, dither, int lookahead, unsigned char verbose, float[:,::1] rgb_to_cam16ucs):
+        screen, float[:, :, ::1] image_rgb, dither, int lookahead, unsigned char verbose, float[:, ::1] rgb_to_cam16ucs):
     cdef int y, x
     cdef unsigned char i, j, pixels_nbit, phase
     cdef float[3] quant_error
