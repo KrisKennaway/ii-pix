@@ -13,9 +13,9 @@ cimport common
 def dither_shr_perfect(
         float[:, :, ::1] input_rgb, float[:, ::1] full_palette_cam, float[:, ::1] full_palette_rgb,
         float[:,::1] rgb_to_cam16ucs):
-    cdef int y, x, idx, best_colour_idx, i
+    cdef int y, x, idx, best_colour_idx, i, j
     cdef double best_distance, distance, total_image_error
-    cdef float[::1] best_colour_rgb, pixel_cam
+    cdef float[::1] best_colour_rgb
     cdef float quant_error
     cdef float[:, ::1] palette_rgb, palette_cam
 
@@ -27,11 +27,15 @@ def dither_shr_perfect(
     cdef float decay = 0.5
     cdef int floyd_steinberg = 1
 
+    cdef common.float3 cam, pixel_cam
+
     total_image_error = 0.0
     for y in range(200):
         for x in range(320):
-            line_cam[x, :] = common.convert_rgb_to_cam16ucs(
+            cam = common.convert_rgb_to_cam16ucs(
                 rgb_to_cam16ucs, working_image[y,x,0], working_image[y,x,1], working_image[y,x,2])
+            for j in range(3):
+                line_cam[x, j] = cam.data[j]
 
         for x in range(320):
             pixel_cam = common.convert_rgb_to_cam16ucs(
@@ -40,7 +44,9 @@ def dither_shr_perfect(
             best_distance = 1e9
             best_colour_idx = -1
             for idx in range(palette_size):
-                distance = common.colour_distance_squared(pixel_cam, full_palette_cam[idx, :])
+                for j in range(3):
+                    cam.data[j] = full_palette_cam[idx,j]
+                distance = common.colour_distance_squared(pixel_cam.data, cam.data)
                 if distance < best_distance:
                     best_distance = distance
                     best_colour_idx = idx
@@ -123,9 +129,9 @@ def dither_shr_perfect(
 def dither_shr(
         float[:, :, ::1] input_rgb, float[:, :, ::1] palettes_cam, float[:, :, ::1] palettes_rgb,
         float[:,::1] rgb_to_cam16ucs):
-    cdef int y, x, idx, best_colour_idx, best_palette, i
+    cdef int y, x, idx, best_colour_idx, best_palette, i, j
     cdef double best_distance, distance, total_image_error
-    cdef float[::1] best_colour_rgb, pixel_cam
+    cdef float[::1] best_colour_rgb
     cdef float quant_error
     cdef float[:, ::1] palette_rgb, palette_cam
 
@@ -140,12 +146,16 @@ def dither_shr(
     cdef float decay = 0.5
     cdef int floyd_steinberg = 1
 
+    cdef common.float3 pixel_cam, cam
+
     best_palette = -1
     total_image_error = 0.0
     for y in range(200):
         for x in range(320):
-            line_cam[x, :] = common.convert_rgb_to_cam16ucs(
+            pixel_cam = common.convert_rgb_to_cam16ucs(
                 rgb_to_cam16ucs, working_image[y,x,0], working_image[y,x,1], working_image[y,x,2])
+            for j in range(3):
+                line_cam[x, j] = pixel_cam.data[j]
 
         palette_line = best_palette_for_line(line_cam, palettes_cam, best_palette)
         best_palette = palette_line.palette_idx
@@ -162,7 +172,9 @@ def dither_shr(
             best_distance = 1e9
             best_colour_idx = -1
             for idx in range(16):
-                distance = common.colour_distance_squared(pixel_cam, palette_cam[idx, :])
+                for j in range(3):
+                    cam.data[j] = palette_cam[idx, j]
+                distance = common.colour_distance_squared(pixel_cam.data, cam.data)
                 if distance < best_distance:
                     best_distance = distance
                     best_colour_idx = idx
@@ -256,7 +268,8 @@ cdef PaletteSelection best_palette_for_line(
     cdef int palette_idx, best_palette_idx, palette_entry_idx, pixel_idx
     cdef double best_total_dist, total_dist, best_pixel_dist, pixel_dist
     cdef float[:, ::1] palette_cam
-    cdef float[::1] pixel_cam
+    cdef common.float3 pixel_cam, cam
+    cdef int j
 
     best_total_dist = 1e9
     best_palette_idx = -1
@@ -265,10 +278,13 @@ cdef PaletteSelection best_palette_for_line(
         palette_cam = palettes_cam[palette_idx, :, :]
         total_dist = 0
         for pixel_idx in range(line_size):
-            pixel_cam = line_cam[pixel_idx]
+            for j in range(3):
+                pixel_cam.data[j] = line_cam[pixel_idx, j]
             best_pixel_dist = 1e9
             for palette_entry_idx in range(16):
-                pixel_dist = common.colour_distance_squared(pixel_cam, palette_cam[palette_entry_idx, :])
+                for j in range(3):
+                    cam.data[j] = palette_cam[palette_entry_idx, j]
+                pixel_dist = common.colour_distance_squared(pixel_cam.data, cam.data)
                 if pixel_dist < best_pixel_dist:
                     best_pixel_dist = pixel_dist
             total_dist += best_pixel_dist
@@ -282,14 +298,24 @@ cdef PaletteSelection best_palette_for_line(
     return res
 
 
-cdef float[::1] _convert_rgb12_iigs_to_cam(float [:, ::1] rgb12_iigs_to_cam16ucs, (unsigned char)[::1] point_rgb12) nogil:
+cdef common.float3 _convert_rgb12_iigs_to_cam(float [:, ::1] rgb12_iigs_to_cam16ucs, (unsigned char)[::1] point_rgb12) nogil:
     cdef int rgb12 = (point_rgb12[0] << 8) | (point_rgb12[1] << 4) | point_rgb12[2]
-    return rgb12_iigs_to_cam16ucs[rgb12]
+    cdef int i
+    cdef common.float3 res
+    for i in range(3):
+        res.data[i] = rgb12_iigs_to_cam16ucs[rgb12, i]
+    return res
 
 
 # Wrapper around _convert_rgb12_iigs_to_cam to allow calling from python while retaining fast path for cython calls.
 def convert_rgb12_iigs_to_cam(float [:, ::1] rgb12_iigs_to_cam16ucs, (unsigned char)[::1] point_rgb12) -> float[::1]:
-    return _convert_rgb12_iigs_to_cam(rgb12_iigs_to_cam16ucs, point_rgb12)
+    cdef common.float3 cam = _convert_rgb12_iigs_to_cam(rgb12_iigs_to_cam16ucs, point_rgb12)
+    cdef int i
+    cdef float[::1] res = np.empty((3), dtype=np.float32)
+    for i in range(3):
+        res[i] = cam.data[i]
+    return res
+
 
 
 @cython.cdivision(True)
@@ -305,6 +331,7 @@ cdef float[:, ::1] linear_to_srgb_array(float[:, ::1] a, float gamma=2.4):
     return res
 
 
+# TODO: optimize
 cdef (unsigned char)[:, ::1] _convert_cam16ucs_to_rgb12_iigs(float[:, ::1] point_cam):
     cdef float[:, ::1] rgb
     cdef (float)[:, ::1] rgb12_iigs
@@ -343,7 +370,7 @@ def k_means_with_fixed_centroids(
     cdef (unsigned char)[:, ::1] centroids_rgb12 = np.copy(initial_centroids)
     cdef (unsigned char)[:, ::1] new_centroids_rgb12
 
-    cdef float[::1] point_cam
+    cdef common.float3 point_cam
     cdef float[:, ::1] new_centroids_cam = np.empty((n_clusters - n_fixed, 3), dtype=np.float32)
     cdef float[:, ::1] centroid_cam_sample_positions_total
     cdef int[::1] centroid_sample_counts
@@ -360,17 +387,19 @@ def k_means_with_fixed_centroids(
         # Centroid positions are tracked in 4-bit //gs RGB colour space with distances measured in CAM16UCS colour
         # space.
         for point_idx in range(samples.shape[0]):
-            point_cam = samples[point_idx, :]
+            for j in range(3):
+                point_cam.data[j] = samples[point_idx, j]
             best_error = 1e9
             closest_centroid_idx = 0
             for centroid_idx in range(n_clusters):
                 error = common.colour_distance_squared(
-                    _convert_rgb12_iigs_to_cam(rgb12_iigs_to_cam16ucs, centroids_rgb12[centroid_idx, :]), point_cam)
+                    _convert_rgb12_iigs_to_cam(rgb12_iigs_to_cam16ucs, centroids_rgb12[centroid_idx, :]).data,
+                    point_cam.data)
                 if error < best_error:
                     best_error = error
                     closest_centroid_idx = centroid_idx
             for i in range(3):
-                centroid_cam_sample_positions_total[closest_centroid_idx, i] += point_cam[i]
+                centroid_cam_sample_positions_total[closest_centroid_idx, i] += point_cam.data[i]
             centroid_sample_counts[closest_centroid_idx] += 1
             total_error += best_error
 
