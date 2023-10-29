@@ -4,12 +4,12 @@
 # cython: wraparound=False
 
 
-cdef inline float clip(float a, float min_value, float max_value) nogil:
+cdef inline float clip(float a, float min_value, float max_value) noexcept nogil:
     """Clip a value between min_value and max_value inclusive."""
     return min(max(a, min_value), max_value)
 
 
-cdef inline float3 convert_rgb_to_cam16ucs(float[:, ::1] rgb_to_cam16ucs, float r, float g, float b) nogil:
+cdef inline float3 convert_rgb_to_cam16ucs(float[:, ::1] rgb_to_cam16ucs, float r, float g, float b) noexcept nogil:
     """Converts floating point (r,g,b) valueto 3-tuple in CAM16UCS colour space, via 24-bit RGB lookup matrix."""
 
     cdef unsigned int rgb_24bit = (<unsigned int>(r*255) << 16) + (<unsigned int>(g*255) << 8) + <unsigned int>(b*255)
@@ -20,7 +20,7 @@ cdef inline float3 convert_rgb_to_cam16ucs(float[:, ::1] rgb_to_cam16ucs, float 
     return res
 
 
-cdef inline float colour_distance_squared(float[3] colour1, float[3] colour2) nogil:
+cdef inline float colour_distance_squared(float[3] colour1, float[3] colour2) noexcept nogil:
     """Computes Euclidean squared distance between two floating-point colour 3-tuples."""
 
     return (

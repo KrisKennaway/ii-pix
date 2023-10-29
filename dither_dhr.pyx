@@ -219,7 +219,7 @@ cdef int dither_lookahead(Dither* dither, unsigned char palette_depth, float[:, 
 #     quant_error: RGB quantization error to be diffused
 #
 cdef inline void apply_one_line(Dither* dither, int xl, int xr, int x, float[] image, int image_shape1,
-        float[] quant_error) nogil:
+        float[] quant_error) noexcept nogil:
 
     cdef int i, j
     cdef float error_fraction
@@ -241,7 +241,7 @@ cdef inline void apply_one_line(Dither* dither, int xl, int xr, int x, float[] i
 #     image: RGB pixel data, to be mutated
 #     quant_error: RGB quantization error to be diffused
 #
-cdef void apply(Dither* dither, int x_res, int y_res, int x, int y, float[:,:,::1] image, float[] quant_error) nogil:
+cdef void apply(Dither* dither, int x_res, int y_res, int x, int y, float[:,:,::1] image, float[] quant_error) noexcept nogil:
 
     cdef int i, j, k
 
